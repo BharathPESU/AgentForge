@@ -134,7 +134,7 @@ def test_3_repository_already_exists(mock_create, mock_ag_token, mock_tool_token
 @patch("backend.tools.github_tools.get_github_token", return_value="mock_token_123")
 @patch("backend.agents.github_agent.get_github_token", return_value="mock_token_123")
 @patch.object(GitHubService, "create_repository")
-@patch("backend.tools.github_tools.push_repository")
+@patch("backend.agents.github_agent.push_repository")
 def test_4_github_repository_creation(mock_push, mock_create, mock_ag_token, mock_tool_token, temp_project_dir, sample_plan, sample_design):
     """Test 4 — Mocks GitHub API call to create repository."""
     write_plan_json(temp_project_dir, sample_plan)
@@ -223,7 +223,7 @@ def test_9_github_result_generation(mock_ag_token, mock_tool_token, temp_project
     tester = TesterAgent()
     tester.validate_project(project_path=temp_project_dir)
 
-    with patch.object(GitHubService, "create_repository") as mock_create, patch("backend.tools.github_tools.push_repository") as mock_push:
+    with patch.object(GitHubService, "create_repository") as mock_create, patch("backend.agents.github_agent.push_repository") as mock_push:
         mock_create.return_value = {
             "status": "success",
             "owner": "testuser",
@@ -243,5 +243,6 @@ def test_9_github_result_generation(mock_ag_token, mock_tool_token, temp_project
             data = json.load(f)
         assert data["status"] == "success"
         assert data["next_action"]["agent"] == "deployer_agent"
+
 
 
