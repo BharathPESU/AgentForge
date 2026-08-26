@@ -24,9 +24,18 @@
 2. Coder Agent copies `backend/template/` to `generated/<project>/` if target does not exist.
 3. Coder Agent generates `agents/<agent_id>/prompt.py`, `tools.py`, and `agent.py` for every designed agent.
 4. Coder Agent wires root `agent.py` and updates `settings.yaml`.
-5. Coder Agent returns structured handoff payload for testing.
+5. Coder Agent returns structured handoff payload for testing (`coder_result.json`).
 
-## Stage 4: System Testing (Next Stage)
+## Stage 4: System Testing (Implemented)
 
-- Input: `generated/<project>/`
-- Output: Test execution report and diagnostic status.
+1. Tester Agent receives `coder_result.json`, `plan.json`, `design.json`, and the generated project.
+2. Tester Agent validates architecture and design schemas; if invalid, marks `status: blocked` and routes back to Architect or Designer.
+3. Tester Agent verifies project structure, agent modules, tool definitions, and root agent wiring.
+4. Tester Agent generates and executes unit test suites using pytest.
+5. Tester Agent executes smoke test, verifies Vercel deployment structure compatibility, scans for secret exposure, and checks independent execution.
+6. Tester Agent outputs `docs/test_result.json` specifying overall status (`passed`, `failed`, or `blocked`) and next action handoff (`github_agent` or `coder_agent`).
+
+## Stage 5: GitHub Integration (Next Stage)
+
+- Input: `generated/<project>/` (after `test_result.json` passes)
+- Output: Remote GitHub repository creation and initial commit push.

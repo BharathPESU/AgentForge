@@ -21,5 +21,12 @@
 - Implemented skills (`template-based-code-generation`, `python-code-generation`, `tool-implementation`).
 - Added comprehensive pytest test suite (`backend/tests/test_coder.py`).
 
-## Phase 4: Testing & Deployment Agents [PLANNED]
-- Implement Tester, GitHub, and Deployer agents.
+## Phase 4: Tester Agent [COMPLETED]
+- Implemented `backend/agents/tester_agent.py` using Google ADK.
+- Created `backend/schemas/test_result_schema.json`.
+- Implemented 15 deterministic tools in `backend/tools/tester_tools.py`.
+- Implemented 7 skills in `backend/skills/testing/`.
+- Added comprehensive pytest test suite (`backend/tests/test_tester.py`).
+
+## Phase 5: GitHub & Deployment Agents [PLANNED]
+- Implement GitHub and Deployer agents.

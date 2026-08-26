@@ -8,11 +8,6 @@
 - **Primary Output**: `docs/plan.json` or `backend/docs/plan.json`
 - **Responsibility**: Takes a user's natural-language idea, decomposes it into minimal specialized agents, defines responsibilities, root orchestrator, and communication wiring.
 - **Framework**: Google ADK (`google.adk.Agent`, `google.adk.Runner`).
-- **Tools**:
-  - `read_project_document`
-  - `read_schema`
-  - `validate_plan_json`
-  - `write_plan_json`
 
 ## 2. Designer Agent
 
@@ -23,12 +18,6 @@
 - **Primary Output**: `docs/design.json` or `backend/docs/design.json`
 - **Responsibility**: Takes `plan.json` and creates implementation-ready agent specifications, complete system prompts, typed inputs/outputs, minimum capability tool specifications, and handoff contracts while preserving architecture wiring.
 - **Framework**: Google ADK (`google.adk.Agent`, `google.adk.Runner`).
-- **Tools**:
-  - `read_plan_json`
-  - `read_project_document`
-  - `read_schema`
-  - `validate_design_json`
-  - `write_design_json`
 
 ## 3. Coder Agent
 
@@ -39,19 +28,18 @@
 - **Primary Output**: Working Google ADK Python application in `generated/<project>/`
 - **Responsibility**: Copies `backend/template/` as baseline, performs targeted code modifications to create agent subdirectories (`agents/<agent_id>/agent.py`, `prompt.py`, `tools.py`), implements assigned tools, configures `settings.yaml`, and wires the root orchestrator.
 - **Framework**: Google ADK (`google.adk.Agent`, `google.adk.Runner`).
-- **Tools**:
-  - `copy_template`
-  - `read_file`
-  - `write_file`
-  - `edit_file`
-  - `list_directory`
-  - `terminal_execute`
-  - `validate_plan`
-  - `validate_design`
-  - `inspect_generated_structure`
 
-## 4. Future Agents (Pending Implementation)
+## 4. Tester Agent
 
-- **Tester Agent** (`backend/agents/tester_agent.py`): Execute test suites and verify system functionality.
+- **Location**: `backend/agents/tester_agent.py`
+- **System Prompt**: `backend/prompts/tester_prompt.md`
+- **Output Schema**: `backend/schemas/test_result_schema.json`
+- **Input Files**: `coder_result.json`, `plan.json`, `design.json`, `generated/<project>/`
+- **Primary Output**: `docs/test_result.json`
+- **Responsibility**: Performs 15-step validation suite covering plan/design schemas, project file structure, agent/tool availability, root orchestrator wiring, pytest suite generation and execution, smoke tests, Vercel structure compatibility, secret scanning, and independent execution check.
+- **Framework**: Google ADK (`google.adk.Agent`, `google.adk.Runner`).
+
+## 5. Future Agents (Pending Implementation)
+
 - **GitHub Agent** (`backend/agents/github_agent.py`): Create GitHub repositories and push code.
 - **Deployer Agent** (`backend/agents/deployer_agent.py`): Deploy services to hosting infrastructure.

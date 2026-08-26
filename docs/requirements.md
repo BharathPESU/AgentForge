@@ -29,5 +29,13 @@
 - Shall wire root `agent.py` and update `settings.yaml` matching active agents.
 - Shall return structured handoff payload matching `coder_result_schema.json`.
 
+### Tester Agent (Implemented)
+- Shall accept `coder_result.json`, `plan.json`, `design.json`, and the generated project as input.
+- Shall perform a 15-step validation pipeline covering schema, structure, agents, tools, wiring, tests, smoke test, Vercel structure, security secret scanning, and independent execution.
+- Shall generate unit tests in `generated/<project>/tests/` and execute them via pytest.
+- Shall output valid JSON conforming to `test_result.json` schema.
+- Shall route failures back to `coder_agent`, `designer_agent`, or `architect_agent`.
+- Shall NOT modify production source code to fix failures.
+
 ### Later Stages (Pending)
-- Tester, GitHub, Deployer agent functional requirements.
+- GitHub, Deployer agent functional requirements.

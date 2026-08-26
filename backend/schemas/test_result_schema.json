@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentForgeTestResult",
+  "description": "Tester Agent output and handoff contract for the GitHub Agent",
+  "type": "object",
+  "required": ["status", "project_path", "summary", "checks"],
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["passed", "failed", "blocked"],
+      "description": "Overall test verdict"
+    },
+    "project_path": {
+      "type": "string",
+      "description": "Absolute or relative path to the tested project"
+    },
+    "input_context": {
+      "type": "object",
+      "description": "Summary of what the Coding Agent claimed to implement",
+      "properties": {
+        "coding_status": { "type": "string" },
+        "agents_claimed_changed": { "type": "integer" },
+        "files_modified_count": { "type": "integer" }
+      },
+      "additionalProperties": true
+    },
+    "summary": {
+      "type": "object",
+      "required": ["tests_run", "tests_passed", "tests_failed"],
+      "properties": {
+        "tests_run": { "type": "integer" },
+        "tests_passed": { "type": "integer" },
+        "tests_failed": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+    "checks": {
+      "type": "object",
+      "required": [
+        "plan", "design", "structure", "agents", "tools",
+        "wiring", "communication", "tests", "smoke_test",
+        "vercel_structure", "secrets", "independent_run"
+      ],
+      "properties": {
+        "plan":            { "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] },
+        "design":          { "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] },
+        "structure":       { "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] },
+        "agents":          { "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] },
+        "tools":           { "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] },
+        "wiring":          { "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] },
+        "communication":   { "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] },
+        "tests":           { "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] },
+        "smoke_test":      { "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] },
+        "vercel_structure":{ "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] },
+        "secrets":         { "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] },
+        "independent_run": { "type": "string", "enum": ["passed", "failed", "blocked", "not_run"] }
+      },
+      "additionalProperties": false
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["test", "category", "severity", "message", "responsible_agent"],
+        "properties": {
+          "test":               { "type": "string" },
+          "category":           { "type": "string" },
+          "severity":           { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+          "file":               { "type": "string" },
+          "message":            { "type": "string" },
+          "expected":           { "type": "string" },
+          "actual":             { "type": "string" },
+          "responsible_agent":  { "type": "string" },
+          "recommended_action": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "next_action": {
+      "type": "object",
+      "required": ["agent", "reason"],
+      "properties": {
+        "agent":  { "type": "string" },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

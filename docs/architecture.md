@@ -26,7 +26,13 @@ User Idea (Natural Language)
    generated/<project>/
             │
             ▼
-    [Tester Agent]     (Pending)
+    [Tester Agent]     (Implemented)
+            │
+            ▼
+  docs/test_result.json
+            │
+            ▼
+    [GitHub Agent]     (Pending)
             │
             ▼
     [Deployer Agent]   (Pending)
@@ -50,3 +56,9 @@ User Idea (Natural Language)
 - **Input Artifacts**: `plan.json`, `design.json`
 - **Output**: Working Google ADK Python application copied from `backend/template/` and updated in `generated/<project>/`
 - **Validation**: Pre-generation validation of plan/design + handoff contract check.
+
+### 4. Tester Agent
+- **Component**: `backend/agents/tester_agent.py`
+- **Input Artifacts**: `coder_result.json`, `plan.json`, `design.json`, `generated/<project>/`
+- **Output Artifact**: `docs/test_result.json`
+- **Validation**: 15-step validation pipeline (plan/design schema checks, project structure, agent/tool availability, root agent wiring, pytest suite execution, smoke test, Vercel structure check, secret exposure scanning, independent run verification).

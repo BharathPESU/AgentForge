@@ -124,11 +124,11 @@ def search_files(dir_path: str, pattern: str) -> List[str]:
 def copy_template(destination_path: str, overwrite: bool = False) -> Dict[str, Any]:
     """Copy the AgentForge backend template to the destination project path.
     
-    Checks whether destination already exists and respects overwrite flag.
+    Copies template baseline files into destination directory.
     
     Args:
         destination_path: Absolute or relative path to create the project.
-        overwrite: If True, replaces existing destination. Default False.
+        overwrite: If True, replaces existing files in destination. Default False.
         
     Returns:
         Dict with 'status', 'template_path', 'destination', and 'existed' keys.
@@ -143,25 +143,14 @@ def copy_template(destination_path: str, overwrite: bool = False) -> Dict[str, A
     safe_dest = _assert_in_workspace(destination_path)
     existed = os.path.isdir(safe_dest)
 
-    if existed and not overwrite:
-        return {
-            "status": "exists",
-            "message": "Destination already exists. Set overwrite=True to copy over it.",
-            "template_path": TEMPLATE_PATH,
-            "destination": safe_dest,
-            "existed": True,
-        }
-
-    if existed and overwrite:
-        shutil.rmtree(safe_dest)
-
-    shutil.copytree(TEMPLATE_PATH, safe_dest)
+    shutil.copytree(TEMPLATE_PATH, safe_dest, dirs_exist_ok=True)
     return {
         "status": "success",
         "template_path": TEMPLATE_PATH,
         "destination": safe_dest,
         "existed": existed,
     }
+
 
 
 # ─────────────────────────────────────────────
