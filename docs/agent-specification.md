@@ -49,7 +49,12 @@
 - **Responsibility**: Verifies test result status is `passed`, inspects project files, formats repository name slug, checks for secret exposure, creates remote GitHub repository via GitHub REST API, initializes local Git repository, stages project files (excluding `.env`), creates single commit, sets remote origin URL, pushes `main` branch to remote origin, and outputs `docs/github_result.json` for handoff to `deployer_agent`.
 - **Framework**: Google ADK (`google.adk.Agent`, `google.adk.Runner`).
 
-## 6. Deployer Agent (Pending Implementation)
+## 6. Deployer Agent
 
 - **Location**: `backend/agents/deployer_agent.py`
-- **Responsibility**: Deploy services to Vercel hosting infrastructure.
+- **System Prompt**: `backend/prompts/deployer_prompt.md`
+- **Output Schema**: `backend/schemas/deployment_result_schema.json`
+- **Input Files**: `github_result.json`, `test_result.json`, `plan.json`, `design.json`, `generated/<project>/`
+- **Primary Output**: `docs/deployment_result.json`
+- **Responsibility**: Verifies GitHub publication succeeded (`status == "success"`) and testing passed (`status == "passed"`), inspects project files, creates or finds corresponding Vercel project, injects `GEMINI_API_KEY` into Vercel environment variables directly without disk storage, deploys generated project to Vercel, verifies deployment status and HTTP URL accessibility, and outputs `docs/deployment_result.json` containing GitHub and Vercel URLs.
+- **Framework**: Google ADK (`google.adk.Agent`, `google.adk.Runner`).

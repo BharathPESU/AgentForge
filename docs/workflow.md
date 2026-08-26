@@ -32,7 +32,7 @@
 2. Tester Agent validates architecture and design schemas; if invalid, marks `status: blocked` and routes back to Architect or Designer.
 3. Tester Agent verifies project structure, agent modules, tool definitions, and root agent wiring.
 4. Tester Agent generates and executes unit test suites using pytest.
-5. Tester Agent executes smoke test, verifies Vercel deployment structure compatibility, scans for secret exposure, and checks independent execution.
+5. Tester Agent executes smoke test, verifies Vercel structure compatibility, scans for secret exposure, and checks independent execution.
 6. Tester Agent outputs `docs/test_result.json` specifying overall status (`passed`, `failed`, or `blocked`) and next action handoff (`github_agent` or `coder_agent`).
 
 ## Stage 5: GitHub Integration (Implemented)
@@ -45,7 +45,12 @@
 6. GitHub Agent initializes local Git repository, stages project files, creates clean commit, sets remote origin, and pushes `main` branch.
 7. GitHub Agent outputs `docs/github_result.json` for handoff to `deployer_agent`.
 
-## Stage 6: Deployment (Next Stage)
+## Stage 6: Deployment (Implemented)
 
-- Input: `generated/<project>/` (after `github_result.json` passes)
-- Output: Vercel deployment URL and production environment configuration.
+1. Deployer Agent receives `github_result.json`, `test_result.json`, `plan.json`, `design.json`, and the generated project.
+2. Deployer Agent verifies `github_result.status == "success"` and `test_result.status == "passed"`.
+3. Deployer Agent checks/creates corresponding Vercel project via Vercel REST API (`POST /v9/projects`).
+4. Deployer Agent configures Gemini API key as a Vercel environment variable (`GEMINI_API_KEY`) without writing real keys to disk or repository.
+5. Deployer Agent deploys generated project files to Vercel (`POST /v13/deployments`).
+6. Deployer Agent verifies deployment status and HTTP URL accessibility.
+7. Deployer Agent outputs `docs/deployment_result.json` containing GitHub repository URL and Vercel deployment URL.

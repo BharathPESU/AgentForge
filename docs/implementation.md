@@ -8,6 +8,7 @@ This document describes the implemented components of AgentForge:
 - **Phase 3**: Coder Agent (Google ADK Python Code Generation)
 - **Phase 4**: Tester Agent (Validation, Diagnostics, Handoff)
 - **Phase 5**: GitHub Agent (Repository Creation, Git Staging, Remote Push, Handoff)
+- **Phase 6**: Deployer Agent (Vercel Project Creation, Gemini API Key Env Injection, Deployment, Verification, Handoff)
 
 ---
 
@@ -89,6 +90,23 @@ The GitHub Agent consumes the approved generated project and publishes it to Git
 
 ---
 
+## 6. Deployer Agent Implementation
+
+### Mission
+The Deployer Agent reads `github_result.json` and `test_result.json`, creates/finds the corresponding Vercel project, injects the user's Gemini API key directly into Vercel environment variables without writing secrets to disk, deploys the project to Vercel, verifies deployment URL accessibility, and outputs `docs/deployment_result.json`.
+
+| Component | File Path | Description |
+|---|---|---|
+| Core Agent | `backend/agents/deployer_agent.py` | ADK Agent wrapper with 11-step Vercel deployment pipeline |
+| System Prompt | `backend/prompts/deployer_prompt.md` | System prompt defining GitHub & test verification, secret management, Vercel API deployment, and zero secret leakage rules |
+| Output Schema | `backend/schemas/deployment_result_schema.json` | JSON Schema for Deployer Agent output and final completion contract |
+| Service | `backend/services/vercel_service.py` | Service wrapper for Vercel REST API (`GET /v9/projects`, `POST /v9/projects`, `POST /v10/projects/{id}/env`, `POST /v13/deployments`, `GET /v13/deployments/{id}`) |
+| Tools | `backend/tools/deployer_tools.py` | Deterministic tools (`read_github_result`, `read_test_result`, `inspect_project`, `get_project_metadata`, `check_vercel_project`, `create_vercel_project`, `set_vercel_environment_variable`, `deploy_project`, `get_deployment_status`, `get_deployment_logs`, `verify_deployment`, `write_deployment_result`) |
+| Skills | `backend/skills/deployment/` | Skill suite (4 sub-skills: `vercel`, `secrets`, `verification`, `python-vercel`) |
+| Tests | `backend/tests/test_deployer.py` | Pytest test suite covering 12 scenarios (GitHub/test verification, project metadata extraction, slug formatting, Vercel project creation, env injection, deployment, URL verification, secret safety) |
+
+---
+
 ### Testing Status
 
-- All 48 test cases across `test_architect.py` (9), `test_coder.py` (10), `test_designer.py` (10), `test_tester.py` (10), and `test_github.py` (9) pass cleanly.
+- All 60 test cases across `test_architect.py` (9), `test_coder.py` (10), `test_designer.py` (10), `test_tester.py` (10), `test_github.py` (9), and `test_deployer.py` (12) pass cleanly.

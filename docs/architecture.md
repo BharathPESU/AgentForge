@@ -32,10 +32,16 @@ User Idea (Natural Language)
   docs/test_result.json
             │
             ▼
-    [GitHub Agent]     (Pending)
+    [GitHub Agent]     (Implemented)
             │
             ▼
-    [Deployer Agent]   (Pending)
+ docs/github_result.json
+            │
+            ▼
+    [Deployer Agent]   (Implemented)
+            │
+            ▼
+docs/deployment_result.json
 ```
 
 ## Implemented Architecture Stages
@@ -62,3 +68,15 @@ User Idea (Natural Language)
 - **Input Artifacts**: `coder_result.json`, `plan.json`, `design.json`, `generated/<project>/`
 - **Output Artifact**: `docs/test_result.json`
 - **Validation**: 15-step validation pipeline (plan/design schema checks, project structure, agent/tool availability, root agent wiring, pytest suite execution, smoke test, Vercel structure check, secret exposure scanning, independent run verification).
+
+### 5. GitHub Agent
+- **Component**: `backend/agents/github_agent.py`
+- **Input Artifacts**: `test_result.json`, `coder_result.json`, `plan.json`, `design.json`, `generated/<project>/`
+- **Output Artifact**: `docs/github_result.json`
+- **Validation**: Test result verification, secret safety check, remote repository creation via GitHub REST API, git commit, remote push.
+
+### 6. Deployer Agent
+- **Component**: `backend/agents/deployer_agent.py`
+- **Input Artifacts**: `github_result.json`, `test_result.json`, `plan.json`, `design.json`, `generated/<project>/`
+- **Output Artifact**: `docs/deployment_result.json`
+- **Validation**: GitHub result verification, test result verification, Vercel project management, direct Vercel environment variable injection for Gemini API key, Vercel deployment, URL verification.

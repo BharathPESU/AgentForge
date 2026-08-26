@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentForgeDeploymentResult",
+  "description": "Schema for Deployer Agent execution output and final project completion contract",
+  "type": "object",
+  "required": [
+    "status",
+    "project_path"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["success", "failed", "blocked"],
+      "description": "Overall deployment status"
+    },
+    "project_path": {
+      "type": "string",
+      "description": "Path to the generated project directory"
+    },
+    "github": {
+      "type": "object",
+      "required": ["repository_url", "repository_name", "branch"],
+      "properties": {
+        "repository_url": { "type": "string" },
+        "repository_name": { "type": "string" },
+        "branch": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "vercel": {
+      "type": "object",
+      "required": ["project_name", "deployment_id", "deployment_url", "status"],
+      "properties": {
+        "project_name": { "type": "string" },
+        "deployment_id": { "type": "string" },
+        "deployment_url": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "required": ["gemini_api_key_configured", "environment"],
+      "properties": {
+        "gemini_api_key_configured": { "type": "boolean" },
+        "environment": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "failure": {
+      "type": "object",
+      "required": ["category", "message"],
+      "properties": {
+        "category": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "next_action": {
+      "type": "object",
+      "required": ["agent"],
+      "properties": {
+        "agent": {
+          "type": ["string", "null"],
+          "enum": ["coder_agent", "tester_agent", "github_agent", "deployer_agent", "user", null]
+        },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
