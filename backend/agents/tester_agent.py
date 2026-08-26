@@ -28,9 +28,12 @@ from backend.tools.tester_tools import (
     validate_plan,
 )
 
+from backend.roundRobin import set_gemini_api_key_env
+
 load_dotenv()
 
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
 
 PROMPT_FILE = os.path.join(
     os.path.dirname(__file__), "..", "prompts", "tester_prompt.md"
@@ -96,13 +99,10 @@ class TesterAgent:
     ) -> Dict[str, Any]:
         """Perform comprehensive 15-step validation suite on the target project.
         
-        Args:
-            project_path: Path to target generated project.
-            override_llm_response: Optional string override for testing.
-            
         Returns:
             Dict containing test_result.json contract structure.
         """
+        set_gemini_api_key_env()
         abs_proj = os.path.abspath(project_path)
         failures: List[Dict[str, Any]] = []
 

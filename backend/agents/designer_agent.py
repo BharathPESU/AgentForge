@@ -20,10 +20,13 @@ from backend.tools.designer_tools import (
 )
 from backend.tools.file_tools import read_project_document
 
+from backend.roundRobin import set_gemini_api_key_env
+
 load_dotenv()
 
 MAX_DESIGN_RETRIES = 3
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
 
 PROMPT_FILE = os.path.join(
     os.path.dirname(__file__), "..", "prompts", "designer_prompt.md"

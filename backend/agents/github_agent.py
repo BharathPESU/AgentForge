@@ -25,9 +25,12 @@ from backend.tools.github_tools import (
     set_remote,
 )
 
+from backend.roundRobin import set_gemini_api_key_env
+
 load_dotenv()
 
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
 
 PROMPT_FILE = os.path.join(
     os.path.dirname(__file__), "..", "prompts", "github_prompt.md"

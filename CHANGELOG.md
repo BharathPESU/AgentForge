@@ -2,6 +2,15 @@
 
 All notable changes to AgentForge will be documented in this file.
 
+## [0.8.0] - 2026-08-26
+
+### Added
+- Configured `gemini-3.5-flash` model as default across all builder agents and `backend/config/settings.yaml`.
+- Created thread-safe round-robin API key manager in `backend/roundRobin.py`.
+- Populated `.env` with 30 Gemini API keys (`GEMINI_API_KEY1` through `GEMINI_API_KEY30`).
+- Integrated round-robin key rotation into all agent invocation steps.
+- Created unit test suite `backend/tests/test_round_robin.py` covering key rotation.
+
 ## [0.7.0] - 2026-08-26
 
 ### Added

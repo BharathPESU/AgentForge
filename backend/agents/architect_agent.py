@@ -18,10 +18,13 @@ from backend.tools.file_tools import (
     write_plan_json,
 )
 
+from backend.roundRobin import set_gemini_api_key_env
+
 load_dotenv()
 
 MAX_PLAN_RETRIES = 3
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
 
 PROMPT_FILE = os.path.join(
     os.path.dirname(__file__), "..", "prompts", "architect_prompt.md"

@@ -15,9 +15,12 @@ from backend.agents.designer_agent import DesignerAgent
 from backend.agents.github_agent import GitHubAgent
 from backend.agents.tester_agent import TesterAgent
 
+from backend.roundRobin import set_gemini_api_key_env
+
 load_dotenv()
 
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
 MAX_CODER_RETRIES = 3
 
 
@@ -82,7 +85,9 @@ class RootAgent:
             Dict containing full pipeline execution metrics, github/vercel URLs, and status.
         """
         start_time = time.time()
+        set_gemini_api_key_env()
         abs_project_path = os.path.abspath(project_path)
+
         os.makedirs(abs_project_path, exist_ok=True)
 
         pipeline_log: List[Dict[str, Any]] = []

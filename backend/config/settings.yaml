@@ -1,0 +1,4 @@
+model:
+  provider: google
+  name: gemini-3.5-flash
+  temperature: 0.2

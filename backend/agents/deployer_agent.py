@@ -23,9 +23,12 @@ from backend.tools.deployer_tools import (
     write_deployment_result,
 )
 
+from backend.roundRobin import get_next_gemini_api_key, set_gemini_api_key_env
+
 load_dotenv()
 
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
 
 PROMPT_FILE = os.path.join(
     os.path.dirname(__file__), "..", "prompts", "deployer_prompt.md"
@@ -140,8 +143,8 @@ class DeployerAgent:
                 next_reason="Configure VERCEL_TOKEN environment variable in AgentForge.",
             )
 
-        # Step 5: Resolve Gemini API Key (never write to disk!)
-        api_key = gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        # Step 5: Resolve Gemini API Key via round-robin manager (never write to disk!)
+        api_key = gemini_api_key or get_next_gemini_api_key() or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not api_key:
             return self._build_failure_payload(
                 status="failed",
