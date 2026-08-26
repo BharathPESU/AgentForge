@@ -5,6 +5,7 @@
 This document describes the implemented components of AgentForge:
 - **Phase 1**: Architect Agent (`docs/plan.json`)
 - **Phase 2**: Designer Agent (`docs/design.json`)
+- **Phase 3**: Coder Agent (Google ADK Python Code Generation)
 
 ---
 
@@ -45,28 +46,42 @@ The Designer Agent receives the architectural plan (`docs/plan.json` or `backend
 
 ---
 
-### Deterministic Designer Tools
+## 3. Coder Agent Implementation
 
-- **`read_plan_json(project_path: str) -> Dict[str, Any]`**: Loads and validates `plan.json` from `<project_path>/docs/plan.json`, `backend/docs/plan.json`, or `docs/plan.json`.
-- **`read_schema(schema_type: str) -> Dict[str, Any]`**: Loads `design_schema.json` or `plan_schema.json`.
-- **`validate_design_json(design_data: Dict[str, Any], plan_data: Optional[Dict[str, Any]]) -> Dict[str, Any]`**: Enforces JSON Schema compliance and parity rules (agent count, IDs, root agent, and wiring preservation).
-- **`write_design_json(project_path: str, design_data: Dict[str, Any], plan_data: Optional[Dict[str, Any]]) -> str`**: Validates and writes formatted UTF-8 JSON to `<project_path>/docs/design.json` or `backend/docs/design.json`.
+### Mission
+The Coder Agent takes `plan.json` and `design.json`, copies the tested backend template (`backend/template/`), and performs targeted code generation to implement the designed Google ADK multi-agent application.
+
+### Files Implemented
+
+| Component | File Path | Description |
+|---|---|---|
+| Core Agent | `backend/agents/coder_agent.py` | ADK Agent wrapper with template copying, dynamic agent directory generation, tool implementation, and root wiring |
+| System Prompt | `backend/prompts/coder_prompt.md` | System prompt defining template-first rules, minimal targeted edits, and handoff contracts |
+| Output Schema | `backend/schemas/coder_result_schema.json` | JSON Schema for Coder Agent execution output and handoff contract |
+| Tools | `backend/tools/coder_tools.py` | Deterministic tools (`copy_template`, `read_file`, `write_file`, `edit_file`, `list_directory`, `terminal_execute`, `validate_plan`, `validate_design`, `inspect_generated_structure`) |
+| Tests | `backend/tests/test_coder.py` | Pytest test suite covering plan/design validation, template copying, dynamic agent count, tool implementation, root orchestrator wiring, and handoff contracts |
+| Skills | `backend/skills/template-based-code-generation/SKILL.md`<br>`backend/skills/python-code-generation/SKILL.md`<br>`backend/skills/tool-implementation/SKILL.md` | Instructional skills for template reuse, Python ADK standards, and tool implementation |
 
 ---
 
-### Input / Output Contract
+### Deterministic Coder Tools
 
-- **Input**: Architecture plan file (`plan.json`) conforming to `plan_schema.json`.
-- **Output**: Detailed design file (`design.json`) conforming to `design_schema.json` containing complete system prompts, typed inputs/outputs, model parameters, minimum capability tool specs, and wiring.
+- **`copy_template(destination_path: str, overwrite: bool)`**: Copies `backend/template/` to `generated/<project>/` as the initial baseline.
+- **`read_file(file_path: str) -> str`**: Safely reads files within workspace/temp paths.
+- **`write_file(file_path: str, content: str) -> str`**: Writes files creating parent directories as needed.
+- **`edit_file(file_path: str, old_text: str, new_text: str) -> str`**: Performs targeted text replacement.
+- **`terminal_execute(command: str, cwd: Optional[str]) -> Dict[str, Any]`**: Executes restricted development shell commands.
+- **`validate_plan` / `validate_design`**: Validates input plans and designs before code generation.
+- **`inspect_generated_structure(project_path: str) -> Dict[str, Any]`**: Inspects generated project layout.
 
 ---
 
 ### Testing Status
 
-- All 19 test cases across `test_architect.py` (9) and `test_designer.py` (10) pass cleanly.
+- All 29 test cases across `test_architect.py` (9), `test_designer.py` (10), and `test_coder.py` (10) pass cleanly.
 
 ---
 
 ### Known Limitations
 
-- Later AgentForge pipeline agents (Coder, Tester, GitHub, Deployer) are pending implementation in subsequent phases.
+- Tester, GitHub, and Deployer agents are pending implementation in subsequent phases.

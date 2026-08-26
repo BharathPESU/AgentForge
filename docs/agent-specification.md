@@ -30,9 +30,28 @@
   - `validate_design_json`
   - `write_design_json`
 
-## 3. Future Agents (Pending Implementation)
+## 3. Coder Agent
 
-- **Coder Agent** (`backend/agents/coder_agent.py`): Generate Python code and implementation files from `design.json`.
+- **Location**: `backend/agents/coder_agent.py`
+- **System Prompt**: `backend/prompts/coder_prompt.md`
+- **Output Schema**: `backend/schemas/coder_result_schema.json`
+- **Input Files**: `plan.json`, `design.json`
+- **Primary Output**: Working Google ADK Python application in `generated/<project>/`
+- **Responsibility**: Copies `backend/template/` as baseline, performs targeted code modifications to create agent subdirectories (`agents/<agent_id>/agent.py`, `prompt.py`, `tools.py`), implements assigned tools, configures `settings.yaml`, and wires the root orchestrator.
+- **Framework**: Google ADK (`google.adk.Agent`, `google.adk.Runner`).
+- **Tools**:
+  - `copy_template`
+  - `read_file`
+  - `write_file`
+  - `edit_file`
+  - `list_directory`
+  - `terminal_execute`
+  - `validate_plan`
+  - `validate_design`
+  - `inspect_generated_structure`
+
+## 4. Future Agents (Pending Implementation)
+
 - **Tester Agent** (`backend/agents/tester_agent.py`): Execute test suites and verify system functionality.
 - **GitHub Agent** (`backend/agents/github_agent.py`): Create GitHub repositories and push code.
 - **Deployer Agent** (`backend/agents/deployer_agent.py`): Deploy services to hosting infrastructure.

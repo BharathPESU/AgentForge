@@ -6,6 +6,7 @@ AgentForge is an automated multi-agent system builder platform powered by Google
 
 - **Architect Agent** (`backend/agents/architect_agent.py`): Accepts natural-language user ideas, decomposes requirements into minimal specialized agents, designates a root orchestrator, defines wiring contracts, and outputs a validated `docs/plan.json`.
 - **Designer Agent** (`backend/agents/designer_agent.py`): Accepts architectural `plan.json`, generates complete system prompts, typed inputs/outputs, model settings, minimum capability tool specifications, and outputs a validated `docs/design.json`.
+- **Coder Agent** (`backend/agents/coder_agent.py`): Accepts `plan.json` and `design.json`, copies `backend/template/` as baseline, generates dynamic agent modules (`agents/<agent_id>/agent.py`, `prompt.py`, `tools.py`), implements assigned tools, configures `settings.yaml`, and wires the root orchestrator.
 
 ## Quick Start
 
@@ -33,7 +34,7 @@ pytest backend/tests/
 ## Pipeline Artifact Flow
 
 ```text
-User Idea  ──>  Architect Agent  ──>  docs/plan.json  ──>  Designer Agent  ──>  docs/design.json
+User Idea ──> Architect Agent ──> plan.json ──> Designer Agent ──> design.json ──> Coder Agent ──> generated/<project>/
 ```
 
 ## Documentation

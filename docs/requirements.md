@@ -20,5 +20,14 @@
 - Shall preserve agent count, agent IDs, root orchestrator status, and wiring from `plan.json`.
 - Shall save output to `docs/design.json` or `backend/docs/design.json`.
 
+### Coder Agent (Implemented)
+- Shall accept `plan.json` and `design.json` as input.
+- Shall reject invalid or missing plan/design files with a structured failure payload (`missing_plan` or `missing_design`).
+- Shall copy `backend/template/` as baseline when project directory is new.
+- Shall reuse existing project directory structure without destroying extra files.
+- Shall generate `agent.py`, `prompt.py`, and `tools.py` for every agent in `design.json`.
+- Shall wire root `agent.py` and update `settings.yaml` matching active agents.
+- Shall return structured handoff payload matching `coder_result_schema.json`.
+
 ### Later Stages (Pending)
-- Coder, Tester, GitHub, Deployer agent functional requirements.
+- Tester, GitHub, Deployer agent functional requirements.

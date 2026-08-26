@@ -20,7 +20,10 @@ User Idea (Natural Language)
     docs/design.json
             │
             ▼
-    [Coder Agent]      (Pending)
+    [Coder Agent]      (Implemented)
+            │
+            ▼
+   generated/<project>/
             │
             ▼
     [Tester Agent]     (Pending)
@@ -41,3 +44,9 @@ User Idea (Natural Language)
 - **Input Artifact**: `docs/plan.json` or `backend/docs/plan.json`
 - **Output Artifact**: `docs/design.json` or `backend/docs/design.json`
 - **Validation**: Strict JSON Schema (`backend/schemas/design_schema.json`) + parity checks with `plan.json`.
+
+### 3. Coder Agent
+- **Component**: `backend/agents/coder_agent.py`
+- **Input Artifacts**: `plan.json`, `design.json`
+- **Output**: Working Google ADK Python application copied from `backend/template/` and updated in `generated/<project>/`
+- **Validation**: Pre-generation validation of plan/design + handoff contract check.

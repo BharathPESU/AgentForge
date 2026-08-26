@@ -18,7 +18,15 @@
 5. If invalid, the agent executes up to 3 retries for self-correction.
 6. The validated design is saved to `docs/design.json` or `backend/docs/design.json`.
 
-## Stage 3: Code Generation (Next Stage)
+## Stage 3: Code Generation (Implemented)
 
-- Input: `docs/design.json`
-- Output: Google ADK Python code files (`agent.py`, `tools.py`, `prompt.py`).
+1. Coder Agent loads `plan.json` and `design.json`.
+2. Coder Agent copies `backend/template/` to `generated/<project>/` if target does not exist.
+3. Coder Agent generates `agents/<agent_id>/prompt.py`, `tools.py`, and `agent.py` for every designed agent.
+4. Coder Agent wires root `agent.py` and updates `settings.yaml`.
+5. Coder Agent returns structured handoff payload for testing.
+
+## Stage 4: System Testing (Next Stage)
+
+- Input: `generated/<project>/`
+- Output: Test execution report and diagnostic status.
