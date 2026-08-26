@@ -2,6 +2,14 @@
 
 All notable changes to AgentForge will be documented in this file.
 
+## [0.7.0] - 2026-08-26
+
+### Added
+- Implemented **Root Agent** (`backend/agents/root_agent.py`) master orchestrator class `RootAgent` and `run_pipeline` helper.
+- Exported all agents and root pipeline orchestrator in `backend/agents/__init__.py`.
+- Added feedback retry loop between Tester Agent and Coder Agent (up to 3 retries) on test failure.
+- Created unit & integration test suite `backend/tests/test_root.py` covering master pipeline orchestration.
+
 ## [0.6.0] - 2026-08-26
 
 ### Added
@@ -9,10 +17,9 @@ All notable changes to AgentForge will be documented in this file.
 - Added system prompt for Deployer Agent in `backend/prompts/deployer_prompt.md`.
 - Created output JSON Schema for deployment results in `backend/schemas/deployment_result_schema.json`.
 - Implemented Vercel REST API service wrapper in `backend/services/vercel_service.py`.
-- Implemented deterministic tools in `backend/tools/deployer_tools.py` (`read_github_result`, `read_test_result`, `inspect_project`, `get_project_metadata`, `check_vercel_project`, `create_vercel_project`, `set_vercel_environment_variable`, `deploy_project`, `get_deployment_status`, `get_deployment_logs`, `verify_deployment`, `write_deployment_result`).
-- Added skill guides in `backend/skills/deployment/` (`vercel`, `secrets`, `verification`, `python-vercel`).
-- Created unit and integration test suite (`backend/tests/test_deployer.py`) covering 12 test scenarios.
-- Updated system documentation and `docs/implementation.md`.
+- Implemented deterministic tools in `backend/tools/deployer_tools.py`.
+- Added skill guides in `backend/skills/deployment/`.
+- Created unit and integration test suite (`backend/tests/test_deployer.py`).
 
 ## [0.5.0] - 2026-08-26
 

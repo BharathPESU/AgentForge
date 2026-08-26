@@ -3,6 +3,7 @@
 ## Overview
 
 This document describes the implemented components of AgentForge:
+- **Master Orchestrator**: Root Agent (`backend/agents/root_agent.py`)
 - **Phase 1**: Architect Agent (`docs/plan.json`)
 - **Phase 2**: Designer Agent (`docs/design.json`)
 - **Phase 3**: Coder Agent (Google ADK Python Code Generation)
@@ -12,10 +13,21 @@ This document describes the implemented components of AgentForge:
 
 ---
 
-## 1. Architect Agent Implementation
+## Master Root Orchestrator Implementation
 
 ### Mission
-The Architect Agent transforms a user's natural-language idea into a structured, machine-readable multi-agent architecture output file (`docs/plan.json`).
+The Root Agent (`backend/agents/root_agent.py`) coordinates the entire 6-agent builder pipeline sequentially:
+1. **Architect Agent** (`ArchitectAgent`): Natural language idea -> `docs/plan.json`.
+2. **Designer Agent** (`DesignerAgent`): `plan.json` -> `docs/design.json`.
+3. **Coder Agent** (`CoderAgent`): `plan.json` + `design.json` -> `generated/<project>/` + `docs/coder_result.json`.
+4. **Tester Agent** (`TesterAgent`): Project validation & pytest suite execution -> `docs/test_result.json`.
+   - *Feedback Loop*: On testing failure, automatically triggers Coder Agent retry loop (up to 3 retries) and re-evaluates.
+5. **GitHub Agent** (`GitHubAgent`): Verified project -> GitHub REST API repo creation, git init/add/commit/push -> `docs/github_result.json`.
+6. **Deployer Agent** (`DeployerAgent`): Verified project + GitHub URL -> Vercel project creation, direct `GEMINI_API_KEY` env var injection, Vercel deployment, URL verification -> `docs/deployment_result.json`.
+
+---
+
+## 1. Architect Agent Implementation
 
 | Component | File Path | Description |
 |---|---|---|
@@ -29,9 +41,6 @@ The Architect Agent transforms a user's natural-language idea into a structured,
 
 ## 2. Designer Agent Implementation
 
-### Mission
-The Designer Agent receives the architectural plan (`docs/plan.json`) and transforms it into a complete detailed design specification (`docs/design.json`).
-
 | Component | File Path | Description |
 |---|---|---|
 | Core Agent | `backend/agents/designer_agent.py` | ADK Agent wrapper with runner, retry self-correction loop, and design generator |
@@ -44,9 +53,6 @@ The Designer Agent receives the architectural plan (`docs/plan.json`) and transf
 
 ## 3. Coder Agent Implementation
 
-### Mission
-The Coder Agent takes `plan.json` and `design.json`, copies `backend/template/`, and performs targeted code generation to implement the designed Google ADK application.
-
 | Component | File Path | Description |
 |---|---|---|
 | Core Agent | `backend/agents/coder_agent.py` | ADK Agent wrapper with template copying, dynamic agent directory generation, tool implementation, and root wiring |
@@ -58,9 +64,6 @@ The Coder Agent takes `plan.json` and `design.json`, copies `backend/template/`,
 ---
 
 ## 4. Tester Agent Implementation
-
-### Mission
-The Tester Agent performs 15-step validation across `coder_result.json`, `plan.json`, `design.json`, and the generated project runtime. It generates/executes pytest unit tests, runs smoke tests, scans for secrets, checks Vercel structure compatibility, and outputs `docs/test_result.json`.
 
 | Component | File Path | Description |
 |---|---|---|
@@ -75,9 +78,6 @@ The Tester Agent performs 15-step validation across `coder_result.json`, `plan.j
 
 ## 5. GitHub Agent Implementation
 
-### Mission
-The GitHub Agent consumes the approved generated project and publishes it to GitHub after verifying `test_result.json` status is `passed`. It creates the remote repository via GitHub REST API, initializes local git repository, performs security secret safety checks, stages files (excluding `.env`), creates a clean single commit, sets remote origin, pushes to `main` branch, and outputs `docs/github_result.json`.
-
 | Component | File Path | Description |
 |---|---|---|
 | Core Agent | `backend/agents/github_agent.py` | ADK Agent wrapper with 12-step GitHub publishing pipeline and handoff builder |
@@ -86,27 +86,24 @@ The GitHub Agent consumes the approved generated project and publishes it to Git
 | Service | `backend/services/github_service.py` | Service wrapper for GitHub REST API (`GET /user`, `GET /repos/{owner}/{name}`, `POST /user/repos`) |
 | Tools | `backend/tools/github_tools.py` | Deterministic tools (`read_file`, `list_directory`, `inspect_project`, `check_git_status`, `initialize_git`, `create_github_repository`, `add_files`, `commit_changes`, `set_remote`, `push_repository`, `get_repository_info`, `scan_project_secrets`) |
 | Skills | `backend/skills/github/SKILL.md`<br>`backend/skills/git/SKILL.md` | Skill guides for GitHub REST API integration and Git publication workflows |
-| Tests | `backend/tests/test_github.py` | Pytest test suite covering 9 scenarios (test verification, repo slug formatting, duplicate checks, repo creation, git init, commit, remote, push, secret safety) |
+| Tests | `backend/tests/test_github.py` | Pytest test suite covering 9 scenarios |
 
 ---
 
 ## 6. Deployer Agent Implementation
-
-### Mission
-The Deployer Agent reads `github_result.json` and `test_result.json`, creates/finds the corresponding Vercel project, injects the user's Gemini API key directly into Vercel environment variables without writing secrets to disk, deploys the project to Vercel, verifies deployment URL accessibility, and outputs `docs/deployment_result.json`.
 
 | Component | File Path | Description |
 |---|---|---|
 | Core Agent | `backend/agents/deployer_agent.py` | ADK Agent wrapper with 11-step Vercel deployment pipeline |
 | System Prompt | `backend/prompts/deployer_prompt.md` | System prompt defining GitHub & test verification, secret management, Vercel API deployment, and zero secret leakage rules |
 | Output Schema | `backend/schemas/deployment_result_schema.json` | JSON Schema for Deployer Agent output and final completion contract |
-| Service | `backend/services/vercel_service.py` | Service wrapper for Vercel REST API (`GET /v9/projects`, `POST /v9/projects`, `POST /v10/projects/{id}/env`, `POST /v13/deployments`, `GET /v13/deployments/{id}`) |
-| Tools | `backend/tools/deployer_tools.py` | Deterministic tools (`read_github_result`, `read_test_result`, `inspect_project`, `get_project_metadata`, `check_vercel_project`, `create_vercel_project`, `set_vercel_environment_variable`, `deploy_project`, `get_deployment_status`, `get_deployment_logs`, `verify_deployment`, `write_deployment_result`) |
-| Skills | `backend/skills/deployment/` | Skill suite (4 sub-skills: `vercel`, `secrets`, `verification`, `python-vercel`) |
-| Tests | `backend/tests/test_deployer.py` | Pytest test suite covering 12 scenarios (GitHub/test verification, project metadata extraction, slug formatting, Vercel project creation, env injection, deployment, URL verification, secret safety) |
+| Service | `backend/services/vercel_service.py` | Service wrapper for Vercel REST API |
+| Tools | `backend/tools/deployer_tools.py` | Deterministic tools |
+| Skills | `backend/skills/deployment/` | Skill suite (4 sub-skills) |
+| Tests | `backend/tests/test_deployer.py` | Pytest test suite covering 12 scenarios |
 
 ---
 
 ### Testing Status
 
-- All 60 test cases across `test_architect.py` (9), `test_coder.py` (10), `test_designer.py` (10), `test_tester.py` (10), `test_github.py` (9), and `test_deployer.py` (12) pass cleanly.
+- All **66 test cases** across `test_architect.py` (9), `test_coder.py` (10), `test_designer.py` (10), `test_tester.py` (10), `test_github.py` (9), `test_deployer.py` (12), and `test_root.py` (6) pass cleanly.
