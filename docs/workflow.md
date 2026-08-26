@@ -35,7 +35,17 @@
 5. Tester Agent executes smoke test, verifies Vercel deployment structure compatibility, scans for secret exposure, and checks independent execution.
 6. Tester Agent outputs `docs/test_result.json` specifying overall status (`passed`, `failed`, or `blocked`) and next action handoff (`github_agent` or `coder_agent`).
 
-## Stage 5: GitHub Integration (Next Stage)
+## Stage 5: GitHub Integration (Implemented)
 
-- Input: `generated/<project>/` (after `test_result.json` passes)
-- Output: Remote GitHub repository creation and initial commit push.
+1. GitHub Agent receives `test_result.json`, `plan.json`, `design.json`, and the generated project.
+2. GitHub Agent verifies `test_result.json` status is `passed`.
+3. GitHub Agent formats repository slug from `plan.json` project metadata.
+4. GitHub Agent performs secret safety check to prevent `.env` or credential leakage.
+5. GitHub Agent creates remote repository via GitHub REST API (`POST /user/repos`).
+6. GitHub Agent initializes local Git repository, stages project files, creates clean commit, sets remote origin, and pushes `main` branch.
+7. GitHub Agent outputs `docs/github_result.json` for handoff to `deployer_agent`.
+
+## Stage 6: Deployment (Next Stage)
+
+- Input: `generated/<project>/` (after `github_result.json` passes)
+- Output: Vercel deployment URL and production environment configuration.

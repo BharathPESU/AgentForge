@@ -37,5 +37,15 @@
 - Shall route failures back to `coder_agent`, `designer_agent`, or `architect_agent`.
 - Shall NOT modify production source code to fix failures.
 
+### GitHub Agent (Implemented)
+- Shall accept `test_result.json`, `plan.json`, `design.json`, and the generated project as input.
+- Shall verify `test_result.json` status is `passed` before publishing.
+- Shall derive valid repository name slug from `plan.json` metadata.
+- Shall perform secret safety check verifying `.env` is ignored and no hardcoded credentials exist.
+- Shall create remote GitHub repository using GitHub REST API.
+- Shall initialize Git, stage project files, create single clean commit, set remote origin, and push `main` branch.
+- Shall output valid JSON conforming to `github_result_schema.json` for handoff to `deployer_agent`.
+- Shall NOT modify application source code.
+
 ### Later Stages (Pending)
-- GitHub, Deployer agent functional requirements.
+- Deployer agent functional requirements.

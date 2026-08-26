@@ -28,5 +28,13 @@
 - Implemented 7 skills in `backend/skills/testing/`.
 - Added comprehensive pytest test suite (`backend/tests/test_tester.py`).
 
-## Phase 5: GitHub & Deployment Agents [PLANNED]
-- Implement GitHub and Deployer agents.
+## Phase 5: GitHub Agent [COMPLETED]
+- Implemented `backend/agents/github_agent.py` using Google ADK.
+- Created `backend/schemas/github_result_schema.json`.
+- Implemented `backend/services/github_service.py` for GitHub REST API integration.
+- Implemented deterministic tools in `backend/tools/github_tools.py`.
+- Implemented skills in `backend/skills/github/` and `backend/skills/git/`.
+- Added comprehensive pytest test suite (`backend/tests/test_github.py`).
+
+## Phase 6: Deployment Agent [PLANNED]
+- Implement Deployer Agent for Vercel deployment.

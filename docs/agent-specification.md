@@ -36,10 +36,20 @@
 - **Output Schema**: `backend/schemas/test_result_schema.json`
 - **Input Files**: `coder_result.json`, `plan.json`, `design.json`, `generated/<project>/`
 - **Primary Output**: `docs/test_result.json`
-- **Responsibility**: Performs 15-step validation suite covering plan/design schemas, project file structure, agent/tool availability, root orchestrator wiring, pytest suite generation and execution, smoke tests, Vercel structure compatibility, secret scanning, and independent execution check.
+- **Responsibility**: Performs 15-step validation suite covering plan/design schemas, project file structure, agent/tool availability, root agent wiring, pytest suite generation and execution, smoke tests, Vercel structure compatibility, secret scanning, and independent execution check.
 - **Framework**: Google ADK (`google.adk.Agent`, `google.adk.Runner`).
 
-## 5. Future Agents (Pending Implementation)
+## 5. GitHub Agent
 
-- **GitHub Agent** (`backend/agents/github_agent.py`): Create GitHub repositories and push code.
-- **Deployer Agent** (`backend/agents/deployer_agent.py`): Deploy services to hosting infrastructure.
+- **Location**: `backend/agents/github_agent.py`
+- **System Prompt**: `backend/prompts/github_prompt.md`
+- **Output Schema**: `backend/schemas/github_result_schema.json`
+- **Input Files**: `test_result.json`, `coder_result.json`, `plan.json`, `design.json`, `generated/<project>/`
+- **Primary Output**: `docs/github_result.json`
+- **Responsibility**: Verifies test result status is `passed`, inspects project files, formats repository name slug, checks for secret exposure, creates remote GitHub repository via GitHub REST API, initializes local Git repository, stages project files (excluding `.env`), creates single commit, sets remote origin URL, pushes `main` branch to remote origin, and outputs `docs/github_result.json` for handoff to `deployer_agent`.
+- **Framework**: Google ADK (`google.adk.Agent`, `google.adk.Runner`).
+
+## 6. Deployer Agent (Pending Implementation)
+
+- **Location**: `backend/agents/deployer_agent.py`
+- **Responsibility**: Deploy services to Vercel hosting infrastructure.

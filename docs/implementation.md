@@ -7,6 +7,7 @@ This document describes the implemented components of AgentForge:
 - **Phase 2**: Designer Agent (`docs/design.json`)
 - **Phase 3**: Coder Agent (Google ADK Python Code Generation)
 - **Phase 4**: Tester Agent (Validation, Diagnostics, Handoff)
+- **Phase 5**: GitHub Agent (Repository Creation, Git Staging, Remote Push, Handoff)
 
 ---
 
@@ -65,12 +66,29 @@ The Tester Agent performs 15-step validation across `coder_result.json`, `plan.j
 | Core Agent | `backend/agents/tester_agent.py` | ADK Agent wrapper with 15-step validation pipeline and handoff builder |
 | System Prompt | `backend/prompts/tester_prompt.md` | System prompt defining validation steps, failure categories, and status rules |
 | Output Schema | `backend/schemas/test_result_schema.json` | JSON Schema for Tester Agent output and handoff contract for GitHub Agent |
-| Tools | `backend/tools/tester_tools.py` | 15 deterministic tools (`read_file`, `list_directory`, `search_files`, `execute_command`, `validate_plan`, `validate_design`, `inspect_project`, `create_test_file`, `run_test`, `run_test_suite`, `check_import`, `check_agent_wiring`, `run_agent_interaction_test`, `run_smoke_test`, `check_vercel_structure`, `scan_for_secrets`, `check_independent_execution`) |
+| Tools | `backend/tools/tester_tools.py` | 15 deterministic tools for project inspection, pytest suite generation/execution, smoke testing, secret scanning, and independent run verification |
 | Skills | `backend/skills/testing/` | Skill suite (7 sub-skills: `agent-testing`, `multi-agent-communication`, `integration-testing`, `smoke-testing`, `security-checking`, `vercel-validation`, `failure-diagnosis`) |
 | Tests | `backend/tests/test_tester.py` | Pytest test suite covering 10 validation scenarios |
 
 ---
 
+## 5. GitHub Agent Implementation
+
+### Mission
+The GitHub Agent consumes the approved generated project and publishes it to GitHub after verifying `test_result.json` status is `passed`. It creates the remote repository via GitHub REST API, initializes local git repository, performs security secret safety checks, stages files (excluding `.env`), creates a clean single commit, sets remote origin, pushes to `main` branch, and outputs `docs/github_result.json`.
+
+| Component | File Path | Description |
+|---|---|---|
+| Core Agent | `backend/agents/github_agent.py` | ADK Agent wrapper with 12-step GitHub publishing pipeline and handoff builder |
+| System Prompt | `backend/prompts/github_prompt.md` | System prompt defining test result verification, repo slug formatting, secret safety, and git push rules |
+| Output Schema | `backend/schemas/github_result_schema.json` | JSON Schema for GitHub Agent output and handoff contract for Deployer Agent |
+| Service | `backend/services/github_service.py` | Service wrapper for GitHub REST API (`GET /user`, `GET /repos/{owner}/{name}`, `POST /user/repos`) |
+| Tools | `backend/tools/github_tools.py` | Deterministic tools (`read_file`, `list_directory`, `inspect_project`, `check_git_status`, `initialize_git`, `create_github_repository`, `add_files`, `commit_changes`, `set_remote`, `push_repository`, `get_repository_info`, `scan_project_secrets`) |
+| Skills | `backend/skills/github/SKILL.md`<br>`backend/skills/git/SKILL.md` | Skill guides for GitHub REST API integration and Git publication workflows |
+| Tests | `backend/tests/test_github.py` | Pytest test suite covering 9 scenarios (test verification, repo slug formatting, duplicate checks, repo creation, git init, commit, remote, push, secret safety) |
+
+---
+
 ### Testing Status
 
-- All 39 test cases across `test_architect.py` (9), `test_coder.py` (10), `test_designer.py` (10), and `test_tester.py` (10) pass cleanly.
+- All 48 test cases across `test_architect.py` (9), `test_coder.py` (10), `test_designer.py` (10), `test_tester.py` (10), and `test_github.py` (9) pass cleanly.
