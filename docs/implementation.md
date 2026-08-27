@@ -13,12 +13,40 @@ This document describes the implemented components of AgentForge:
 - **Phase 5**: GitHub Agent (Repository Creation, Git Staging, Remote Push, Handoff)
 - **Phase 6**: Deployer Agent (Vercel Project Creation, Gemini API Key Env Injection, Deployment, Verification, Handoff)
 - **Frontend Overview Console**: Hexagonal 6-Node Series Pipeline Visualization (`Frontend/artifacts/agentforge-frontend/src/pages/dashboard.tsx`)
+- **Task Queue & Locked Chat Input**: FIFO Task Queue Data Structure & Auto Navigation (`Frontend/artifacts/agentforge-frontend/src/lib/taskQueue.ts` & `src/pages/chat.tsx`)
+
+---
+
+## Task Queue & Locked Chat Section (`src/lib/taskQueue.ts` & `src/pages/chat.tsx`)
+
+To prevent race conditions and provide a deterministic multi-agent execution pipeline, AgentForge features a FIFO Task Queue and Chat Input Lock:
+
+### Data Structure (`TaskQueue`)
+Defined in `Frontend/artifacts/agentforge-frontend/src/lib/taskQueue.ts`:
+- `enqueue(task: QueuedTask)`: Adds a new user prompt task to the back of the FIFO queue.
+- `dequeue()`: Removes and returns the completed task from the front of the queue once pipeline execution finishes.
+- `peek()`: Inspects the front task in queue.
+- `size()`: Returns current queue length.
+- `isEmpty()`: Checks if queue has pending items.
+
+### Workflow & Locking Behavior
+1. **Submission**: When a prompt is submitted in the Chat section:
+   - The prompt is enqueued into `TaskQueue`.
+   - A confirmation message `📥 "the task has been added to the queue"` is rendered in the chat feed.
+2. **Chat Input Lock**:
+   - The chat section immediately locks input (`isLocked = true`).
+   - Textarea, Submit button, and Preset prompt buttons are disabled while pipeline execution is active.
+   - A lock banner displays: `🔒 Pipeline is currently executing. Chat input is locked until the work is completed.`
+3. **Auto Navigation**:
+   - Immediately after outputting the queue confirmation message, the page automatically navigates to the **Overview section** (`/`), where the 6-node hexagonal series pipeline starts running.
+4. **Unlock**:
+   - Upon completion of all 6 pipeline stages (`status === 'COMPLETED'`), the task is dequeued and the Chat input unlocks for new prompts.
 
 ---
 
 ## Hexagonal Series Pipeline Visualization (`dashboard.tsx`)
 
-The AgentForge Overview / Build Console has been updated to feature a 6-node hexagonal series pipeline diagram matching modern dark-mode aesthetic standards:
+The AgentForge Overview / Build Console features a 6-node hexagonal series pipeline diagram matching modern dark-mode aesthetic standards:
 
 ### Features & Layout
 1. **6 Hexagonal Nodes in Series**:
@@ -33,7 +61,7 @@ The AgentForge Overview / Build Console has been updated to feature a 6-node hex
    - Connecting arrows feature animated particle dashed flow (`animate-dash-flow`).
    - Completed stage nodes feature checkmark badges and glowing borders.
 3. **Full-Width Extended Layout**:
-   - Removed the obsolete "Project signal" side panel to extend the pipeline visualization across the full width.
+   - Extended the pipeline visualization across the full width.
 4. **Interactive Completion Banner**:
    - On pipeline completion, renders a completion banner with "PIPELINE EXECUTION COMPLETE", live Vercel URL, and an interactive "Navigate to Deployment" action button.
 
@@ -42,26 +70,6 @@ The AgentForge Overview / Build Console has been updated to feature a 6-node hex
 ## Round-Robin Gemini API Key Manager (`backend/roundRobin.py`)
 
 To ensure rate limits are never exceeded during agent executions, AgentForge uses thread-safe round-robin API key rotation across 30 configured Gemini API keys (`GEMINI_API_KEY1` through `GEMINI_API_KEY30`).
-
-### Functions
-- `get_next_gemini_api_key() -> str`: Returns the next API key in round-robin sequence.
-- `set_gemini_api_key_env() -> str`: Selects the next key and updates `os.environ["GEMINI_API_KEY"]` and `os.environ["GOOGLE_API_KEY"]`.
-- `get_all_gemini_api_keys() -> List[str]`: Retrieves all loaded API keys.
-- `reset_round_robin()`: Resets counter for testing.
-
----
-
-## Agent Model Configuration
-
-All agents default to `gemini-3.5-flash`:
-- **Architect Agent** (`backend/agents/architect_agent.py`)
-- **Designer Agent** (`backend/agents/designer_agent.py`)
-- **Coder Agent** (`backend/agents/coder_agent.py`)
-- **Tester Agent** (`backend/agents/tester_agent.py`)
-- **GitHub Agent** (`backend/agents/github_agent.py`)
-- **Deployer Agent** (`backend/agents/deployer_agent.py`)
-- **Root Agent** (`backend/agents/root_agent.py`)
-- **Settings**: `backend/config/settings.yaml`
 
 ---
 

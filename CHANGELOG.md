@@ -4,7 +4,14 @@ All notable changes to AgentForge will be documented in this file.
 
 ## [0.9.0] - 2026-08-28
 
+## [0.9.1] - 2026-08-28
+
 ### Added
+- Implemented `TaskQueue` FIFO data structure class in `Frontend/artifacts/agentforge-frontend/src/lib/taskQueue.ts`.
+- Added prompt enqueuing and confirmation message `"the task has been added to the queue"` in `src/pages/chat.tsx`.
+- Added Chat Input Locking (`isLocked`) disabling textarea, submit button, and presets while pipeline execution is active.
+- Added automatic page navigation to the Overview section (`/`) immediately after enqueueing a task.
+
 - Replaced Overview section pipeline diagram with a custom 6-node hexagonal series pipeline component in `Frontend/artifacts/agentforge-frontend/src/pages/dashboard.tsx`.
 - Added glowing pulse animations for active running stages (`animate-hex-blink`) and particle dash flow for connecting arrows (`animate-[#dash-flow]`).
 - Added icons for each stage: Architecture (`Building2`), Design (`FileEdit`), Coding (`Code2`), Testing (`ClipboardCheck`), GitHub (`Github`), Deployment (`CloudUpload`).
