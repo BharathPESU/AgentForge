@@ -5,10 +5,10 @@ app:
   description: "Modular multi-agent architecture built with Google GenAI / ADK"
 
 models:
-  default: "gemini-2.5-flash"
-  reasoning: "gemini-2.5-pro"
-  creative: "gemini-2.5-flash"
-  fast: "gemini-2.5-flash"
+  default: "gemini-3.5-flash"
+  reasoning: "gemini-3.5-flash"
+  creative: "gemini-3.5-flash"
+  fast: "gemini-3.5-flash"
 
 generation:
   temperature: 0.7
@@ -19,41 +19,25 @@ generation:
 agents:
   agent1:
     id: "agent1"
-    name: "Research Specialist"
-    role: "Information Retrieval & Web Knowledge"
-    model: "gemini-2.5-flash"
+    name: "Orchestrator_Agent"
+    role: "Primary Task Ingestion & Orchestration"
+    model: "gemini-3.5-flash"
     temperature: 0.3
     enabled: true
 
   agent2:
     id: "agent2"
-    name: "Code Analyst & Engineer"
-    role: "Code Generation, Sandbox Execution & Debugging"
-    model: "gemini-2.5-pro"
+    name: "Specialist_Agent_A"
+    role: "Domain Analysis & Feature Extraction"
+    model: "gemini-3.5-flash"
     temperature: 0.2
     enabled: true
 
   agent3:
     id: "agent3"
-    name: "Data & Math Analyst"
-    role: "Calculations, Data Structuring & Quantitative Logic"
-    model: "gemini-2.5-flash"
-    temperature: 0.1
-    enabled: true
-
-  agent4:
-    id: "agent4"
-    name: "Synthesis & Writer"
-    role: "Markdown Reports, Summaries & Tone Crafting"
-    model: "gemini-2.5-flash"
-    temperature: 0.7
-    enabled: true
-
-  agent5:
-    id: "agent5"
-    name: "Critic & Verifier"
-    role: "Fact-Checking, Hallucination Audit & QA Assessment"
-    model: "gemini-2.5-pro"
+    name: "Specialist_Agent_B"
+    role: "Quantitative Analysis & Verification"
+    model: "gemini-3.5-flash"
     temperature: 0.1
     enabled: true
 

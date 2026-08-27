@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 from dotenv import load_dotenv
@@ -189,32 +190,54 @@ class ArchitectAgent:
         }
 
     def _run_adk_runner(self, prompt: str) -> str:
-        """Run ADK Agent using Runner and InMemorySessionService."""
-        session_service = InMemorySessionService()
-        runner = adk.Runner(
-            agent=self.adk_agent,
-            app_name="agentforge",
-            session_service=session_service,
-            auto_create_session=True,
-        )
+        """Run ADK Agent using Runner and InMemorySessionService with automatic key rotation on 429 quota errors."""
+        max_attempts = 10
+        last_exc = None
 
-        session_id = str(uuid.uuid4())
-        content = types.Content(parts=[types.Part.from_text(text=prompt)])
-        
-        output_chunks: List[str] = []
-        events = runner.run(
-            user_id="agentforge_user",
-            session_id=session_id,
-            new_message=content,
-        )
+        for attempt in range(max_attempts):
+            set_gemini_api_key_env()
+            self.adk_agent = self._build_adk_agent()
 
-        for event in events:
-            if hasattr(event, "content") and event.content:
-                if hasattr(event.content, "parts"):
-                    for part in event.content.parts:
-                        if hasattr(part, "text") and part.text:
-                            output_chunks.append(part.text)
-            elif hasattr(event, "text") and event.text:
-                output_chunks.append(event.text)
+            session_service = InMemorySessionService()
+            runner = adk.Runner(
+                agent=self.adk_agent,
+                app_name="agentforge",
+                session_service=session_service,
+                auto_create_session=True,
+            )
 
-        return "".join(output_chunks)
+            session_id = str(uuid.uuid4())
+            content = types.Content(parts=[types.Part.from_text(text=prompt)])
+
+            output_chunks: List[str] = []
+            try:
+                events = runner.run(
+                    user_id="agentforge_user",
+                    session_id=session_id,
+                    new_message=content,
+                )
+
+                for event in events:
+                    if hasattr(event, "content") and event.content:
+                        if hasattr(event.content, "parts"):
+                            for part in event.content.parts:
+                                if hasattr(part, "text") and part.text:
+                                    output_chunks.append(part.text)
+                    elif hasattr(event, "text") and event.text:
+                        output_chunks.append(event.text)
+
+                result_text = "".join(output_chunks)
+                if result_text.strip():
+                    return result_text
+            except Exception as e:
+                last_exc = e
+                err_str = str(e)
+                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "Quota" in err_str or "exhausted" in err_str:
+                    time.sleep(1.0)
+                    continue
+                raise e
+
+        if last_exc:
+            raise last_exc
+        return ""
+

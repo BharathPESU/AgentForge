@@ -199,7 +199,7 @@ def test_3_template_copying(temp_project_dir):
     res = copy_template(dest)
     assert res["status"] == "success"
     assert os.path.isfile(os.path.join(dest, "agent.py"))
-    assert os.path.isfile(os.path.join(dest, "fast_api.py"))
+    assert os.path.isfile(os.path.join(dest, "app.py"))
     assert os.path.isfile(os.path.join(dest, "settings.yaml"))
 
 

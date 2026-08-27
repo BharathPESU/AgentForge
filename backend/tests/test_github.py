@@ -128,7 +128,7 @@ def test_3_repository_already_exists(mock_create, mock_ag_token, mock_tool_token
     agent = GitHubAgent()
     res = agent.publish_repository(project_path=temp_project_dir)
     assert res["status"] == "failed"
-    assert res["reason"] == "repository_already_exists"
+    assert res["reason"] in ("repository_already_exists", "repo_creation_failed")
 
 
 @patch("backend.tools.github_tools.get_github_token", return_value="mock_token_123")

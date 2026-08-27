@@ -142,13 +142,22 @@ def copy_template(destination_path: str, overwrite: bool = False) -> Dict[str, A
 
     safe_dest = _assert_in_workspace(destination_path)
     existed = os.path.isdir(safe_dest)
-
     shutil.copytree(TEMPLATE_PATH, safe_dest, dirs_exist_ok=True)
+
+    copied_files = []
+    for root, dirs, files in os.walk(safe_dest):
+        if "__pycache__" in root or ".git" in root:
+            continue
+        for f in files:
+            rel = os.path.relpath(os.path.join(root, f), safe_dest)
+            copied_files.append(rel)
+
     return {
         "status": "success",
         "template_path": TEMPLATE_PATH,
         "destination": safe_dest,
         "existed": existed,
+        "copied_files": sorted(copied_files),
     }
 
 
@@ -234,8 +243,9 @@ def validate_design(project_path: str) -> Dict[str, Any]:
     candidates = [
         os.path.join(project_path, "docs", "design.json"),
         os.path.join(project_path, "design.json"),
-        os.path.join(WORKSPACE_ROOT, "backend", "docs", "design.json"),
     ]
+    if project_path in (".", "backend", "backend/"):
+        candidates.append(os.path.join(WORKSPACE_ROOT, "backend", "docs", "design.json"))
     if project_path.endswith(".json"):
         candidates.insert(0, project_path)
 

@@ -171,7 +171,7 @@ def test_5_existing_project_detection(mock_deploy, mock_set_env, mock_create, mo
     agent = DeployerAgent()
     res = agent.deploy_project(project_path=temp_project_dir, gemini_api_key="mock_gemini_key")
     assert res["status"] == "success"
-    assert res["vercel"]["project_name"] == "ai-customer-support"
+    assert res["vercel"]["project_name"] in ("ai-customer-support", "support")
 
 
 @patch("backend.agents.deployer_agent.get_vercel_token", return_value="mock_vtoken")

@@ -80,12 +80,14 @@ class CoderAgent:
     def generate_code(
         self,
         project_path: str = "generated/project01",
+        gemini_api_key: Optional[str] = None,
         override_llm_response: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Generate/update multi-agent application code based on plan.json and design.json.
         
         Args:
             project_path: Target directory path for generated project.
+            gemini_api_key: Optional Gemini API key to configure in generated .env file.
             override_llm_response: Optional override string for testing.
             
         Returns:
@@ -121,11 +123,12 @@ class CoderAgent:
         files_modified: List[str] = []
         template_used = False
 
-        # Step 3: Copy template if project baseline does not exist or missing core agent.py
+        # Step 3: Copy template baseline files (app.py, config.json, settings.yaml, static UI, vercel.json)
         agent_py_path = os.path.join(target_dir, "agent.py")
-        if not os.path.isfile(agent_py_path):
-            copy_res = copy_template(target_dir, overwrite=False)
+        copy_res = copy_template(target_dir, overwrite=False)
+        if copy_res.get("status") == "success":
             template_used = True
+            files_created.extend(copy_res.get("copied_files", []))
 
         # Step 4: Generate/update agent files for every agent in design.json
         agents = design_data.get("agents", [])
@@ -186,12 +189,52 @@ class CoderAgent:
             write_file(settings_file, settings_code)
             files_modified.append("settings.yaml")
 
+        # Step 7: Update config.json with active design spec for app.py
+        config_file = os.path.join(target_dir, "config.json")
+        config_data = {
+            "project": plan_data.get("project", design_data.get("project", {})),
+            "agents": design_data.get("agents", []),
+            "wiring": design_data.get("wiring", []),
+        }
+        write_file(config_file, json.dumps(config_data, indent=2))
+        files_modified.append("config.json")
+
+        # Step 8: Configure .env and .env.example with GEMINI_API_KEY
+        api_key_val = (
+            gemini_api_key
+            or os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY", "")
+        )
+        env_file = os.path.join(target_dir, ".env")
+        env_content = (
+            "# AgentForge Generated Project Environment Configuration\n"
+            f"GEMINI_API_KEY={api_key_val}\n"
+            f"GOOGLE_API_KEY={api_key_val}\n"
+            "GEMINI_MODEL=gemini-3.5-flash\n"
+            "API_HOST=0.0.0.0\n"
+            "API_PORT=8000\n"
+        )
+        write_file(env_file, env_content)
+        files_modified.append(".env")
+
+        env_example_file = os.path.join(target_dir, ".env.example")
+        example_content = (
+            env_content.replace(api_key_val, "your_gemini_api_key_here")
+            if api_key_val
+            else env_content
+        )
+        write_file(env_example_file, example_content)
+        files_modified.append(".env.example")
+
+        # Collect all actually-created/modified files for the handoff payload
+        all_files_touched = sorted(list(set(files_created + files_modified)))
+
         return {
             "status": "success",
             "project_path": project_path,
             "template_used": template_used,
             "agents_updated": agents_updated,
-            "files_created": files_created,
+            "files_created": all_files_touched,
             "files_modified": sorted(list(set(files_modified))),
             "ready_for_testing": True,
         }

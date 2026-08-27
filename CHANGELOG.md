@@ -2,6 +2,16 @@
 
 All notable changes to AgentForge will be documented in this file.
 
+## [0.9.0] - 2026-08-28
+
+### Added
+- Replaced Overview section pipeline diagram with a custom 6-node hexagonal series pipeline component in `Frontend/artifacts/agentforge-frontend/src/pages/dashboard.tsx`.
+- Added glowing pulse animations for active running stages (`animate-hex-blink`) and particle dash flow for connecting arrows (`animate-[#dash-flow]`).
+- Added icons for each stage: Architecture (`Building2`), Design (`FileEdit`), Coding (`Code2`), Testing (`ClipboardCheck`), GitHub (`Github`), Deployment (`CloudUpload`).
+- Extended pipeline container full-width to the right side, removing the old "Project signal" card.
+- Added pipeline completion banner with live Vercel URL and interactive "Navigate to Deployment" action button.
+
+
 ## [0.8.0] - 2026-08-26
 
 ### Added

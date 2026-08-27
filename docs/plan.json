@@ -1,0 +1,84 @@
+{
+  "assumptions": [
+    "The input PDFs contain extractable text (not scanned images requiring OCR).",
+    "The size of the extracted text fits within the context window of the LLM powering the agents.",
+    "The user provides a valid file path or accessible URL to a PDF paper."
+  ],
+  "wiring": [
+    {
+      "to": "agent2",
+      "input": [
+        "paper_text"
+      ],
+      "output": [
+        "methodology_summary"
+      ],
+      "from": "agent1",
+      "execution": "parallel",
+      "condition": "always"
+    },
+    {
+      "to": "agent3",
+      "input": [
+        "paper_text"
+      ],
+      "output": [
+        "benchmark_metrics"
+      ],
+      "from": "agent1",
+      "condition": "always",
+      "execution": "parallel"
+    }
+  ],
+  "agents": [
+    {
+      "responsibility": "Reads and parses PDF documents using extraction tools, and routes the extracted text to specialized agents in parallel to compile the final methodology and metric summary.",
+      "tools_required": [
+        "pdf_text_extractor"
+      ],
+      "output": [
+        "final_report"
+      ],
+      "id": "agent1",
+      "input": [
+        "pdf_path"
+      ],
+      "is_root": true,
+      "name": "ResearchCoordinatorAgent",
+      "description": "Coordinates the ingestion of technical PDFs and orchestrates specialized extraction agents to produce structured research reports."
+    },
+    {
+      "name": "MethodologyExtractorAgent",
+      "input": [
+        "paper_text"
+      ],
+      "output": [
+        "methodology_summary"
+      ],
+      "id": "agent2",
+      "tools_required": [],
+      "responsibility": "Performs deep semantic analysis of the paper text to extract core algorithmic innovations, mathematical models, and architectural components, and formats them into a structured summary.",
+      "is_root": false,
+      "description": "Analyzes research paper text to extract, structure, and summarize key methodologies, algorithms, and architectures."
+    },
+    {
+      "description": "Analyzes research paper text to locate and extract quantitative benchmark datasets, evaluation metrics, and performance tables.",
+      "output": [
+        "benchmark_metrics"
+      ],
+      "is_root": false,
+      "responsibility": "Scans the experimental and evaluation sections of the paper to extract key datasets used, baseline comparisons, metrics, and quantitative benchmark results, formatting them into structured data.",
+      "tools_required": [],
+      "input": [
+        "paper_text"
+      ],
+      "id": "agent3",
+      "name": "BenchmarkExtractorAgent"
+    }
+  ],
+  "project": {
+    "description": "An AI assistant to automatically digest technical research PDFs, summarize methodologies, and extract benchmark metrics.",
+    "name": "research_assistant",
+    "goal": "To automate the analysis of technical research papers by extracting core methodological innovations and structured benchmark metrics from ingested PDFs."
+  }
+}

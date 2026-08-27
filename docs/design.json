@@ -1,0 +1,192 @@
+{
+  "agents": [
+    {
+      "inputs": [
+        {
+          "name": "pdf_path",
+          "description": "The filesystem path or accessible URL to the research PDF paper.",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "error_handling": [
+        "If the pdf_text_extractor tool fails or throws an error, return a detailed error message as the final_report indicating that the PDF could not be processed.",
+        "If downstream agents fail to return a response, indicate their failure in the corresponding sections of the final report instead of failing the entire execution."
+      ],
+      "constraints": [
+        "Must only process PDF paths provided as inputs.",
+        "Must compile downstream agent results without editing, omitting, or modifying the scientific integrity of the extracted details.",
+        "Do not hallucinate paper content if text extraction returns an empty result."
+      ],
+      "description": "Coordinates the ingestion of technical PDFs and orchestrates specialized extraction agents to produce structured research reports.",
+      "system_prompt": "You are the ResearchCoordinatorAgent, the orchestrator of the research paper analysis pipeline. Your goal is to ingest a PDF path, extract the text, and trigger specialized extraction agents (MethodologyExtractorAgent and BenchmarkExtractorAgent) in parallel, and then compile their outputs into a final cohesive markdown research report.\n\nTask Processing Instructions:\n1. Receive the 'pdf_path' input parameter.\n2. Call the 'pdf_text_extractor' tool to extract plaintext from the PDF. If the tool fails or returns empty text, halt execution and output an error message.\n3. Route the extracted 'paper_text' to MethodologyExtractorAgent (agent2) and BenchmarkExtractorAgent (agent3) in parallel.\n4. Receive 'methodology_summary' from agent2 and 'benchmark_metrics' from agent3.\n5. Consolidate both inputs into a single, comprehensive markdown report styled as a professional research synthesis. Include dedicated sections for 'Methodological Contributions' and 'Experimental & Benchmark Results'.\n6. Return the consolidated markdown text as 'final_report'.\n\nInput Fields Expected:\n- pdf_path: Path or URL to the target technical research paper PDF.\n\nOutput Fields Produced:\n- final_report: Cohesive markdown summary compiling methodologies and benchmark metrics.\n\nTool Usage Rules:\n- Only use the 'pdf_text_extractor' tool. Do not attempt to read other file types or run external programs.\n\nBehavioral Constraints:\n- Do not modify, invent, or hallucinate results returned by downstream agents.\n- Maintain a high-quality, professional tone in the compiled report.\n\nError Handling and Fallback Guidelines:\n- If the PDF extraction fails, return a detailed error as the 'final_report' and abort downstream calls.\n- If any downstream agent fails or returns an error, indicate this clearly in the respective section of the 'final_report' instead of failing the entire process.",
+      "outputs": [
+        {
+          "description": "A detailed research report compiling methodology summaries and benchmark metrics in markdown format.",
+          "type": "string",
+          "name": "final_report"
+        }
+      ],
+      "name": "ResearchCoordinatorAgent",
+      "handoff": {
+        "downstream": [
+          "agent2",
+          "agent3"
+        ],
+        "upstream": []
+      },
+      "tools": [
+        {
+          "inputs": [
+            {
+              "type": "string",
+              "description": "The path or URL to the PDF file.",
+              "name": "pdf_path"
+            }
+          ],
+          "description": "Extracts plaintext content from a PDF file.",
+          "purpose": "To read and parse local or remote PDF papers into raw text for analysis.",
+          "restrictions": [
+            "Do not use on scanned PDFs requiring OCR.",
+            "Do not use on encrypted or password-protected PDF files."
+          ],
+          "when_to_use": "Use when a PDF file is provided and raw text extraction is needed.",
+          "outputs": [
+            {
+              "name": "extracted_text",
+              "description": "The extracted raw plaintext of the PDF.",
+              "type": "string"
+            }
+          ],
+          "name": "pdf_text_extractor"
+        }
+      ],
+      "model": {
+        "model_name": "gemini-2.5-flash",
+        "provider": "google",
+        "reason": "Coordinates parallel tasks and compiles reports; requires strong orchestration and formatting capabilities.",
+        "temperature": 0.2
+      },
+      "id": "agent1",
+      "responsibility": "Reads and parses PDF documents using extraction tools, and routes the extracted text to specialized agents in parallel to compile the final methodology and metric summary."
+    },
+    {
+      "constraints": [
+        "Must summarize only methodologies explicitly mentioned in the input paper text.",
+        "Must not reference outside knowledge or other papers unless cited and detailed in the text.",
+        "Keep mathematical formulations mathematically accurate to the input."
+      ],
+      "tools": [],
+      "error_handling": [
+        "If paper_text is empty, return a message: 'Error: No paper text provided for methodology extraction.'",
+        "If no methodology or architecture is found in the text, return a structured markdown indicating 'No methodology details found in the provided text.'"
+      ],
+      "description": "Analyzes research paper text to extract, structure, and summarize key methodologies, algorithms, and architectures.",
+      "id": "agent2",
+      "model": {
+        "model_name": "gemini-2.5-flash",
+        "temperature": 0.2,
+        "provider": "google",
+        "reason": "Deep semantic analysis and understanding of complex technical details."
+      },
+      "name": "MethodologyExtractorAgent",
+      "system_prompt": "You are the MethodologyExtractorAgent. Your goal is to analyze research paper text to extract, structure, and summarize key methodologies, algorithms, and architectures.\n\nTask Processing Instructions:\n1. Receive the 'paper_text' input.\n2. Analyze the text specifically looking for introduction of novel architectures, proposed models, algorithms, mathematical formulations, and engineering techniques.\n3. Structure the summary into markdown format, highlighting key innovations, a detailed description of the model or architecture, formal mathematical equations, and training/algorithmic steps.\n4. Return the structured summary as 'methodology_summary'.\n\nInput Fields Expected:\n- paper_text: Raw plaintext of the research paper.\n\nOutput Fields Produced:\n- methodology_summary: Structured markdown summary of findings.\n\nTool Usage Rules:\n- No tools are assigned. Do not attempt to call any tools.\n\nBehavioral Constraints:\n- Rely strictly on the provided paper text. Do not invent methodologies or borrow from external sources not cited or detailed in the text.\n- Do not simplify mathematical formulas to the point of losing correctness; preserve original variable notations.\n\nError Handling and Fallback Guidelines:\n- If 'paper_text' is empty or invalid, return a message indicating that no input text was available for analysis.\n- If no distinct methodology or algorithm is found, summarize the general approaches mentioned and state that no novel methodology details were identified.",
+      "handoff": {
+        "upstream": [
+          "agent1"
+        ],
+        "downstream": []
+      },
+      "inputs": [
+        {
+          "type": "string",
+          "description": "The raw plaintext of the research paper.",
+          "required": true,
+          "name": "paper_text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "methodology_summary",
+          "description": "Structured summary of the methodology, algorithms, and architecture in markdown format.",
+          "type": "string"
+        }
+      ],
+      "responsibility": "Performs deep semantic analysis of the paper text to extract core algorithmic innovations, mathematical models, and architectural components, and formats them into a structured summary."
+    },
+    {
+      "error_handling": [
+        "If paper_text is empty, return 'Error: No paper text provided for benchmark extraction.'",
+        "If no experimental results or benchmark metrics are found, output a section stating 'No benchmark or experimental results were identified in the paper.'"
+      ],
+      "handoff": {
+        "downstream": [],
+        "upstream": [
+          "agent1"
+        ]
+      },
+      "description": "Analyzes research paper text to locate and extract quantitative benchmark datasets, evaluation metrics, and performance tables.",
+      "tools": [],
+      "outputs": [
+        {
+          "type": "string",
+          "name": "benchmark_metrics",
+          "description": "Markdown tables and summary of baseline comparisons, metrics, and quantitative performance results."
+        }
+      ],
+      "id": "agent3",
+      "constraints": [
+        "All numbers, metrics, baseline models, and datasets must be directly sourced from the paper_text.",
+        "Do not invent baseline comparisons or metrics.",
+        "Benchmark tables must be formatted in markdown table format."
+      ],
+      "model": {
+        "provider": "google",
+        "reason": "Accurate extraction and representation of quantitative tabular data.",
+        "temperature": 0.2,
+        "model_name": "gemini-2.5-flash"
+      },
+      "system_prompt": "You are the BenchmarkExtractorAgent. Your goal is to analyze research paper text to locate, extract, and format baseline comparisons, datasets, evaluation metrics, and performance tables.\n\nTask Processing Instructions:\n1. Receive the 'paper_text' input.\n2. Locate the experimental, evaluation, results, or baseline sections in the text.\n3. Identify datasets used (names, size, domain), evaluation metrics (accuracy, latency, F1-score, BLEU, etc.), baseline systems compared, and experimental results.\n4. Format all extracted benchmarks and evaluation metrics into markdown tables.\n5. Return the result as 'benchmark_metrics'.\n\nInput Fields Expected:\n- paper_text: Raw plaintext of the research paper.\n\nOutput Fields Produced:\n- benchmark_metrics: Structured markdown table or report detailing benchmark metrics.\n\nTool Usage Rules:\n- No tools are assigned. Do not attempt to call any tools.\n\nBehavioral Constraints:\n- Ensure absolute fidelity to the quantitative data in the text. Do not approximate or round numbers differently unless the paper does.\n- Do not invent metrics or results.\n\nError Handling and Fallback Guidelines:\n- If 'paper_text' is empty or invalid, return an error message indicating that no input text was available.\n- If no benchmark tables or quantitative evaluations are found, return a section stating 'No benchmark metrics or experimental results were identified in the paper.'",
+      "inputs": [
+        {
+          "name": "paper_text",
+          "description": "The raw plaintext of the research paper.",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "name": "BenchmarkExtractorAgent",
+      "responsibility": "Scans the experimental and evaluation sections of the paper to extract key datasets used, baseline comparisons, metrics, and quantitative benchmark results, formatting them into structured data."
+    }
+  ],
+  "wiring": [
+    {
+      "output": [
+        "methodology_summary"
+      ],
+      "to": "agent2",
+      "input": [
+        "paper_text"
+      ],
+      "from": "agent1",
+      "condition": "always",
+      "execution": "parallel"
+    },
+    {
+      "output": [
+        "benchmark_metrics"
+      ],
+      "input": [
+        "paper_text"
+      ],
+      "execution": "parallel",
+      "condition": "always",
+      "to": "agent3",
+      "from": "agent1"
+    }
+  ],
+  "project": {
+    "name": "research_assistant",
+    "description": "An AI assistant to automatically digest technical research PDFs, summarize methodologies, and extract benchmark metrics."
+  }
+}

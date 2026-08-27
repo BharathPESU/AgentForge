@@ -1,0 +1,151 @@
+{
+  "project": {
+    "name": "Multi-Agent System Template",
+    "description": "A clean, reusable Google ADK Multi-Agent Collective architecture driven by configuration."
+  },
+  "agents": [
+    {
+      "id": "agent1",
+      "name": "Orchestrator_Agent",
+      "description": "Primary coordinator agent responsible for task ingestion, routing, and compilation.",
+      "responsibility": "Parse user input and coordinate downstream specialist agents.",
+      "model": {
+        "provider": "google",
+        "model_name": "gemini-3.5-flash",
+        "temperature": 0.2,
+        "reason": "Strong orchestration, routing, and synthesis capabilities."
+      },
+      "system_prompt": "You are Orchestrator_Agent, the main coordinator of the multi-agent system. Your role is to analyze user requests, invoke available tools or sub-agents, and synthesize a cohesive final response.",
+      "inputs": [
+        {
+          "name": "user_query",
+          "type": "string",
+          "description": "The user input query or instruction.",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "final_response",
+          "type": "string",
+          "description": "Consolidated response output."
+        }
+      ],
+      "tools": [
+        {
+          "name": "example_tool",
+          "description": "Example tool template for Agent 1.",
+          "purpose": "Perform specific tool operations."
+        }
+      ],
+      "constraints": [
+        "Maintain structured formatting.",
+        "Synthesize downstream results accurately."
+      ],
+      "error_handling": [
+        "If a tool or sub-agent fails, provide clear status feedback."
+      ],
+      "handoff": {
+        "upstream": [],
+        "downstream": [
+          "agent2",
+          "agent3"
+        ]
+      }
+    },
+    {
+      "id": "agent2",
+      "name": "Specialist_Agent_A",
+      "description": "First domain specialist agent focused on specific analytical tasks.",
+      "responsibility": "Perform specialized analysis and structural extraction.",
+      "model": {
+        "provider": "google",
+        "model_name": "gemini-3.5-flash",
+        "temperature": 0.2
+      },
+      "system_prompt": "You are Specialist_Agent_A. Your role is to perform detailed domain analysis and return structured outputs.",
+      "inputs": [
+        {
+          "name": "input_data",
+          "type": "string",
+          "description": "Input data for specialist analysis.",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "analysis_output",
+          "type": "string",
+          "description": "Structured analysis summary."
+        }
+      ],
+      "tools": [],
+      "constraints": [
+        "Rely strictly on provided input data."
+      ],
+      "error_handling": [
+        "Return error status if input data is missing or invalid."
+      ],
+      "handoff": {
+        "upstream": [
+          "agent1"
+        ],
+        "downstream": []
+      }
+    },
+    {
+      "id": "agent3",
+      "name": "Specialist_Agent_B",
+      "description": "Second domain specialist agent focused on quantitative or verification tasks.",
+      "responsibility": "Extract quantitative metrics, performance data, or verify logic.",
+      "model": {
+        "provider": "google",
+        "model_name": "gemini-3.5-flash",
+        "temperature": 0.2
+      },
+      "system_prompt": "You are Specialist_Agent_B. Your role is to extract quantitative metrics, tables, and verify data accuracy.",
+      "inputs": [
+        {
+          "name": "input_data",
+          "type": "string",
+          "description": "Input data for verification or quantitative extraction.",
+          "required": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "metrics_output",
+          "type": "string",
+          "description": "Structured metrics and quantitative data."
+        }
+      ],
+      "tools": [],
+      "constraints": [
+        "Ensure accurate numerical and tabular output."
+      ],
+      "error_handling": [
+        "Return fallback status if quantitative data is unavailable."
+      ],
+      "handoff": {
+        "upstream": [
+          "agent1"
+        ],
+        "downstream": []
+      }
+    }
+  ],
+  "wiring": [
+    {
+      "from": "agent1",
+      "to": "agent2",
+      "condition": "always",
+      "execution": "parallel"
+    },
+    {
+      "from": "agent1",
+      "to": "agent3",
+      "condition": "always",
+      "execution": "parallel"
+    }
+  ]
+}

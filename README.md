@@ -30,11 +30,34 @@ GITHUB_TOKEN=your_github_pat_here
 VERCEL_TOKEN=your_vercel_token_here
 ```
 
+### Running Both Backend and Frontend
+
+Launch both the FastAPI backend and React frontend concurrently using the startup script:
+
+```bash
+./start.sh
+```
+
+- **Backend API**: `http://localhost:8000` (OpenAPI Docs: `http://localhost:8000/docs`)
+- **React Frontend**: `http://localhost:5173`
+
 ### Running Tests
 
 ```bash
-pytest backend/tests/
+PYTHONPATH=. pytest backend/tests/
 ```
+
+
+### Running the FastAPI Backend Server
+
+Start the RESTful API server for React frontend integration:
+
+```bash
+python3 -m uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Interactive OpenAPI documentation will be available at `http://localhost:8000/docs`.
+
 
 ## Pipeline Artifact Flow
 

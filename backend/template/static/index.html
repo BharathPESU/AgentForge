@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Agent Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon"><i class="fas fa-robot"></i></div>
+                <div class="brand-text">
+                    <h2>Agent Studio</h2>
+                    <span class="subtitle">Multi-Agent System</span>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <label for="agent-select"><i class="fas fa-sliders"></i> Target Agent</label>
+                <div class="select-wrapper">
+                    <select id="agent-select">
+                        <option value="auto">Auto-Route (Orchestrator)</option>
+                    </select>
+                    <i class="fas fa-chevron-down select-arrow"></i>
+                </div>
+            </div>
+
+            <div class="agent-info-card" id="agent-info">
+                <div class="info-title"><i class="fas fa-microchip"></i> Auto-Route Mode</div>
+                <div class="info-desc">Orchestrator dynamically routes queries to the optimal agent or executes parallel pipeline.</div>
+            </div>
+
+            <div class="status-panel">
+                <div id="connection-status" class="status-badge status-online">
+                    <span class="status-dot"></span>
+                    <span class="status-text">System Ready</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="chat-area">
+            <header class="chat-header">
+                <div class="header-title">
+                    <h1 id="current-agent-display">Multi-Agent System</h1>
+                    <span class="header-badge" id="header-mode-badge">Auto-Routing Active</span>
+                </div>
+            </header>
+
+            <div id="chat-messages" class="messages-container">
+                <div class="message system-message">
+                    <div class="avatar"><i class="fas fa-brain"></i></div>
+                    <div class="message-content">
+                        <div class="sender-name">System Orchestrator</div>
+                        <p>Welcome to the Multi-Agent Studio. Select a target agent or keep Auto-Route enabled, and type your instruction below.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-container">
+                    <textarea id="user-input" placeholder="Type a message or technical request..." rows="1"></textarea>
+                    <button id="send-btn" title="Send message"><i class="fas fa-paper-plane"></i></button>
+                </div>
+                <div class="input-footer">
+                    <span>Powered by FastAPI & Dynamic Configuration</span>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

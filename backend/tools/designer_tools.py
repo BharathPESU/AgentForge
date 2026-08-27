@@ -46,9 +46,12 @@ def read_plan_json(project_path: str = ".") -> Dict[str, Any]:
         candidates.extend([
             os.path.join(project_path, "docs", "plan.json"),
             os.path.join(project_path, "plan.json"),
-            os.path.join(WORKSPACE_ROOT, "backend", "docs", "plan.json"),
-            os.path.join(WORKSPACE_ROOT, "docs", "plan.json"),
         ])
+        if project_path in (".", "backend", "backend/"):
+            candidates.extend([
+                os.path.join(WORKSPACE_ROOT, "backend", "docs", "plan.json"),
+                os.path.join(WORKSPACE_ROOT, "docs", "plan.json"),
+            ])
 
     target_file = None
     for cand in candidates:

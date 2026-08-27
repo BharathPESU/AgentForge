@@ -3,6 +3,8 @@
 import json
 import os
 import re
+import hashlib
+import time
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 
@@ -55,6 +57,111 @@ def format_repo_name(name: str) -> str:
     slug = re.sub(r"[^a-z0-9\-]", "-", slug)
     slug = re.sub(r"-+", "-", slug)
     return slug.strip("-")
+
+
+def _slug(text: str, max_len: int = 20) -> str:
+    """Sanitise arbitrary text into a valid GitHub slug truncated to max_len."""
+    s = text.strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    s = s.strip("-")
+    return s[:max_len].rstrip("-")
+
+
+def ai_generate_repo_name(
+    project_name: str,
+    description: str,
+    max_len: int = 20,
+) -> str:
+    """Ask Gemini to generate a creative, memorable GitHub repository slug.
+
+    The model is instructed to return ONLY the slug (lowercase, hyphens,
+    max max_len chars) and nothing else.  Falls back to a formatted version
+    of project_name if the API call fails or produces an invalid slug.
+
+    Args:
+        project_name: Raw project name from plan.json.
+        description: Project description from plan.json.
+        max_len: Hard maximum character limit (default 20).
+
+    Returns:
+        A valid, AI-generated GitHub repo slug <= max_len characters.
+    """
+    try:
+        from backend.roundRobin import set_gemini_api_key_env
+        from google import genai as _genai
+
+        set_gemini_api_key_env()
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("No Gemini API key available")
+
+        model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        client = _genai.Client(api_key=api_key)
+
+        prompt = (
+            f"Generate a creative, memorable GitHub repository slug for a project called "
+            f"'{project_name}' described as: '{description}'.\n\n"
+            f"Rules:\n"
+            f"- Output ONLY the slug — nothing else, no explanation, no quotes\n"
+            f"- Lowercase letters, digits, and hyphens only\n"
+            f"- Maximum {max_len} characters\n"
+            f"- Must be concise and meaningful\n"
+            f"- No leading or trailing hyphens\n"
+            f"Examples of good slugs: 'pdf-brain', 'bench-scout', 'ra-core', 'insight-mesh'\n"
+        )
+
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=_genai.types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=32,
+            ),
+        )
+        raw = response.text.strip().split("\n")[0].strip()
+        slug = _slug(raw, max_len)
+        if slug and len(slug) >= 3:
+            return slug
+    except Exception:
+        pass  # fall through to deterministic fallback
+
+    # Deterministic fallback: shorten the plan name
+    return _slug(format_repo_name(project_name), max_len)
+
+
+def ensure_unique_repo_name(
+    gh_service: Any,
+    owner: str,
+    base_name: str,
+    max_attempts: int = 8,
+) -> str:
+    """Return a repo name that does not yet exist on GitHub.
+
+    If *base_name* is already taken, appends a short 4-hex-char suffix derived
+    from the current timestamp.  Tries up to *max_attempts* variants before
+    giving up and returning the last candidate (creation may still fail).
+
+    Args:
+        gh_service: An authenticated GitHubService instance.
+        owner: GitHub username / org.
+        base_name: Preferred slug (already validated, ≤ 20 chars).
+        max_attempts: How many unique suffixes to try.
+
+    Returns:
+        A repo name that was verified as available (or the last attempted name).
+    """
+    candidate = base_name
+    for attempt in range(max_attempts):
+        check = gh_service.check_repository_exists(owner, candidate)
+        if not check.get("exists"):
+            return candidate
+        # Generate a short unique suffix from epoch + attempt
+        suffix_src = f"{time.time():.0f}{attempt}"
+        suffix = hashlib.md5(suffix_src.encode()).hexdigest()[:4]
+        # Trim base to leave room for suffix with hyphen
+        trimmed = base_name[:19].rstrip("-")
+        candidate = f"{trimmed}-{suffix}"
+    return candidate
 
 
 
@@ -159,7 +266,8 @@ class GitHubAgent:
             raw_name = proj_meta.get("name", raw_name)
             description = proj_meta.get("description", description)
 
-        repo_name = format_repo_name(raw_name)
+        # Step 3b: Use AI to generate a creative, unique ≤20-char repo slug
+        ai_name = ai_generate_repo_name(raw_name, description, max_len=20)
 
         # Step 4: Secret scan before staging
         sec_res = scan_project_secrets(project_path)
@@ -176,7 +284,7 @@ class GitHubAgent:
 
         # Step 5 & 6: Create GitHub repository via API
         is_private = private if private is not None else os.getenv("GITHUB_REPOSITORY_PRIVATE", "true").lower() == "true"
-        
+
         token = get_github_token()
         if not token:
             return self._build_failure_payload(
@@ -190,20 +298,24 @@ class GitHubAgent:
             )
 
         gh_service = GitHubService(token=token)
+
+        # Resolve the authenticated user so we can check for name conflicts
+        user_res = gh_service.get_authenticated_user()
+        owner_login = user_res.get("login", "") if user_res.get("status") == "success" else ""
+
+        # Auto-resolve naming conflicts: append a short suffix if needed
+        repo_name = ensure_unique_repo_name(gh_service, owner_login, ai_name)
+
         repo_res = gh_service.create_repository(name=repo_name, description=description, private=is_private)
 
         if repo_res.get("status") == "exists":
-            return self._build_failure_payload(
-                status="failed",
-                project_path=project_path,
-                reason="repository_already_exists",
-                error_category="REPOSITORY_CONFLICT",
-                message=f"Repository '{repo_res.get('owner')}/{repo_name}' already exists on GitHub.",
-                next_agent="github_agent",
-                next_reason="Repository name conflict on GitHub.",
-            )
+            # Last-resort conflict (race condition) — append extra suffix
+            import hashlib, time as _time
+            suffix = hashlib.md5(f"{_time.time()}".encode()).hexdigest()[:4]
+            repo_name = f"{repo_name[:19].rstrip('-')}-{suffix}"
+            repo_res = gh_service.create_repository(name=repo_name, description=description, private=is_private)
 
-        if repo_res.get("status") != "success":
+        if repo_res.get("status") not in ("success",):
             return self._build_failure_payload(
                 status="failed",
                 project_path=project_path,
