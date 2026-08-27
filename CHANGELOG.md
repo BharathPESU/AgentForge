@@ -4,7 +4,13 @@ All notable changes to AgentForge will be documented in this file.
 
 ## [0.9.0] - 2026-08-28
 
-## [0.9.2] - 2026-08-28
+## [0.9.3] - 2026-08-28
+
+### Added
+- Added interactive **Terminate Task** capability in the Chat section (`src/pages/chat.tsx`).
+- Implemented `handleTerminateTask()` aborting active SSE streams, stopping backend execution, clearing the task queue, and unlocking chat input.
+- Added Terminate Task buttons in the page header, lock banner, and submit action slot.
+
 
 ### Optimized
 - Optimized `ArchitectAgent` (`backend/agents/architect_agent.py`) and `DesignerAgent` (`backend/agents/designer_agent.py`) for single-turn structured generation.

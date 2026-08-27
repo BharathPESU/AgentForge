@@ -14,6 +14,32 @@ This document describes the implemented components of AgentForge:
 - **Phase 6**: Deployer Agent (Vercel Project Creation, Gemini API Key Env Injection, Deployment, Verification, Handoff)
 - **Frontend Overview Console**: Hexagonal 6-Node Series Pipeline Visualization (`Frontend/artifacts/agentforge-frontend/src/pages/dashboard.tsx`)
 - **Task Queue & Locked Chat Input**: FIFO Task Queue Data Structure & Auto Navigation (`Frontend/artifacts/agentforge-frontend/src/lib/taskQueue.ts` & `src/pages/chat.tsx`)
+- **Chat Section Task Termination**: Interactive Task Termination capability (`src/pages/chat.tsx`)
+
+---
+
+## Task Queue, Chat Locking & Task Termination (`src/lib/taskQueue.ts` & `src/pages/chat.tsx`)
+
+To prevent race conditions and provide deterministic user control over running multi-agent jobs, AgentForge features a FIFO Task Queue, Chat Input Lock, and Task Termination:
+
+### Data Structure (`TaskQueue`)
+Defined in `Frontend/artifacts/agentforge-frontend/src/lib/taskQueue.ts`:
+- `enqueue(task: QueuedTask)`: Adds a new user prompt task to the back of the FIFO queue.
+- `dequeue()`: Removes and returns the completed task from the front of the queue once pipeline execution finishes.
+- `peek()`: Inspects the front task in queue.
+- `size()`: Returns current queue length.
+- `isEmpty()`: Checks if queue has pending items.
+- `clear()`: Empties all queued items.
+
+### Task Termination Workflow
+1. **Interactive Terminate Option**:
+   - Available in the Chat section page intro header, lock banner, and main action slot when `isLocked` is active.
+2. **Termination Actions (`handleTerminateTask`)**:
+   - Aborts active SSE streaming fetch controllers (`abortControllerRef.current.abort()`).
+   - Calls backend/hook stop method `stop()` (`api.stop(projectId)`).
+   - Clears the task queue (`taskQueueRef.current.clear()`).
+   - Resets state (`isSubmitting = false`, `apiKeyModalOpen = false`).
+   - Appends a red termination status message `🛑 Task Execution Terminated` to the chat feed and unlocks the chat input immediately.
 
 ---
 
@@ -28,33 +54,6 @@ To reduce the Architecture Agent stage execution latency from **~25 seconds down
    - Removed 5-turn LLM function-calling loops (`read_schema` $\rightarrow$ `read_project_document` $\rightarrow$ LLM generation $\rightarrow$ `validate_plan_json` $\rightarrow$ `write_plan_json`), reducing total LLM network turns from 5 to **1 single turn**.
 3. **Deterministic Python Execution**:
    - Python code in `generate_plan()` and `generate_design()` handles JSON schema validation (`validate_plan_json`) and file writing (`write_plan_json`) directly and deterministically in under 1ms.
-
----
-
-## Task Queue & Locked Chat Section (`src/lib/taskQueue.ts` & `src/pages/chat.tsx`)
-
-To prevent race conditions and provide a deterministic multi-agent execution pipeline, AgentForge features a FIFO Task Queue and Chat Input Lock:
-
-### Data Structure (`TaskQueue`)
-Defined in `Frontend/artifacts/agentforge-frontend/src/lib/taskQueue.ts`:
-- `enqueue(task: QueuedTask)`: Adds a new user prompt task to the back of the FIFO queue.
-- `dequeue()`: Removes and returns the completed task from the front of the queue once pipeline execution finishes.
-- `peek()`: Inspects the front task in queue.
-- `size()`: Returns current queue length.
-- `isEmpty()`: Checks if queue has pending items.
-
-### Workflow & Locking Behavior
-1. **Submission**: When a prompt is submitted in the Chat section:
-   - The prompt is enqueued into `TaskQueue`.
-   - A confirmation message `📥 "the task has been added to the queue"` is rendered in the chat feed.
-2. **Chat Input Lock**:
-   - The chat section immediately locks input (`isLocked = true`).
-   - Textarea, Submit button, and Preset prompt buttons are disabled while pipeline execution is active.
-   - A lock banner displays: `🔒 Pipeline is currently executing. Chat input is locked until the work is completed.`
-3. **Auto Navigation**:
-   - Immediately after outputting the queue confirmation message, the page automatically navigates to the **Overview section** (`/`), where the 6-node hexagonal series pipeline starts running.
-4. **Unlock**:
-   - Upon completion of all 6 pipeline stages (`status === 'COMPLETED'`), the task is dequeued and the Chat input unlocks for new prompts.
 
 ---
 
