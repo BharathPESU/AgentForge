@@ -4,7 +4,12 @@ All notable changes to AgentForge will be documented in this file.
 
 ## [0.9.0] - 2026-08-28
 
-## [0.9.3] - 2026-08-28
+## [0.9.4] - 2026-08-28
+
+### Added
+- Added permanently visible **Terminate Pipeline** red controls in the Chat section ([src/pages/chat.tsx](file:///home/bharath/Desktop/projects/AgentForge/Frontend/artifacts/agentforge-frontend/src/pages/chat.tsx)).
+- Controls are rendered in top Page Intro action bar, Chat panel header bar, and next to the prompt Build action slot.
+
 
 ### Added
 - Added interactive **Terminate Task** capability in the Chat section (`src/pages/chat.tsx`).

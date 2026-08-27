@@ -14,13 +14,13 @@ This document describes the implemented components of AgentForge:
 - **Phase 6**: Deployer Agent (Vercel Project Creation, Gemini API Key Env Injection, Deployment, Verification, Handoff)
 - **Frontend Overview Console**: Hexagonal 6-Node Series Pipeline Visualization (`Frontend/artifacts/agentforge-frontend/src/pages/dashboard.tsx`)
 - **Task Queue & Locked Chat Input**: FIFO Task Queue Data Structure & Auto Navigation (`Frontend/artifacts/agentforge-frontend/src/lib/taskQueue.ts` & `src/pages/chat.tsx`)
-- **Chat Section Task Termination**: Interactive Task Termination capability (`src/pages/chat.tsx`)
+- **Permanently Visible Task Termination**: Multi-location Terminate Pipeline UI controls (`src/pages/chat.tsx`)
 
 ---
 
-## Task Queue, Chat Locking & Task Termination (`src/lib/taskQueue.ts` & `src/pages/chat.tsx`)
+## Task Queue, Chat Locking & Permanent Task Termination (`src/lib/taskQueue.ts` & `src/pages/chat.tsx`)
 
-To prevent race conditions and provide deterministic user control over running multi-agent jobs, AgentForge features a FIFO Task Queue, Chat Input Lock, and Task Termination:
+To prevent race conditions and provide deterministic user control over running multi-agent jobs, AgentForge features a FIFO Task Queue, Chat Input Lock, and permanently accessible Task Termination controls:
 
 ### Data Structure (`TaskQueue`)
 Defined in `Frontend/artifacts/agentforge-frontend/src/lib/taskQueue.ts`:
@@ -31,15 +31,10 @@ Defined in `Frontend/artifacts/agentforge-frontend/src/lib/taskQueue.ts`:
 - `isEmpty()`: Checks if queue has pending items.
 - `clear()`: Empties all queued items.
 
-### Task Termination Workflow
-1. **Interactive Terminate Option**:
-   - Available in the Chat section page intro header, lock banner, and main action slot when `isLocked` is active.
-2. **Termination Actions (`handleTerminateTask`)**:
-   - Aborts active SSE streaming fetch controllers (`abortControllerRef.current.abort()`).
-   - Calls backend/hook stop method `stop()` (`api.stop(projectId)`).
-   - Clears the task queue (`taskQueueRef.current.clear()`).
-   - Resets state (`isSubmitting = false`, `apiKeyModalOpen = false`).
-   - Appends a red termination status message `🛑 Task Execution Terminated` to the chat feed and unlocks the chat input immediately.
+### Permanent Multi-Location Task Termination Controls
+1. **Top Intro Action Bar**: Red **`Terminate Pipeline`** button (`<Button variant="danger"><Square /> Terminate Pipeline</Button>`) permanently accessible at the top right of the Chat page.
+2. **Chat Panel Header Bar**: Permanent red **`Terminate Pipeline`** button rendered right next to the pipeline status indicator inside the orchestrator header.
+3. **Input Action Area**: Red **`Stop`** button rendered next to `Build` (transforms into a prominent red `Terminate` button while locked/running).
 
 ---
 
