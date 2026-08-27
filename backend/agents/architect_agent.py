@@ -33,12 +33,21 @@ PROMPT_FILE = os.path.join(
 
 
 def load_architect_instruction(prompt_path: Optional[str] = None) -> str:
-    """Load the Architect Agent system instruction from markdown file."""
+    """Load the Architect Agent system instruction from markdown file and append plan_schema.json."""
     path = prompt_path or PROMPT_FILE
     if not os.path.exists(path):
         raise FileNotFoundError(f"Prompt file not found at: {path}")
     with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+        instruction = f.read()
+
+    try:
+        schema_dict = read_schema()
+        schema_json = json.dumps(schema_dict, indent=2)
+        instruction += f"\n\nTarget JSON Schema (`plan_schema.json`) to follow strictly:\n```json\n{schema_json}\n```\n"
+    except Exception:
+        pass
+
+    return instruction
 
 
 def extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
@@ -90,19 +99,15 @@ class ArchitectAgent:
         self.adk_agent = self._build_adk_agent()
 
     def _build_adk_agent(self) -> adk.Agent:
-        """Instantiate Google ADK Agent with deterministic tools."""
+        """Instantiate Google ADK Agent for direct single-turn JSON generation."""
         return adk.Agent(
             name="architect_agent",
             description="AgentForge Architect Agent for multi-agent system design",
             model=self.model_name,
             instruction=self.instruction,
-            tools=[
-                read_project_document,
-                read_schema,
-                validate_plan_json,
-                write_plan_json,
-            ],
+            tools=[],  # Direct single-turn JSON generation (no multi-turn tool loops)
         )
+
 
     def generate_plan(
         self,

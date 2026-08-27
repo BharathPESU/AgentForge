@@ -35,12 +35,21 @@ PROMPT_FILE = os.path.join(
 
 
 def load_designer_instruction(prompt_path: Optional[str] = None) -> str:
-    """Load the Designer Agent system instruction from markdown file."""
+    """Load the Designer Agent system instruction from markdown file and append design_schema.json."""
     path = prompt_path or PROMPT_FILE
     if not os.path.exists(path):
         raise FileNotFoundError(f"Prompt file not found at: {path}")
     with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+        instruction = f.read()
+
+    try:
+        schema_dict = read_schema()
+        schema_json = json.dumps(schema_dict, indent=2)
+        instruction += f"\n\nTarget JSON Schema (`design_schema.json`) to follow strictly:\n```json\n{schema_json}\n```\n"
+    except Exception:
+        pass
+
+    return instruction
 
 
 class DesignerAgent:
@@ -61,20 +70,15 @@ class DesignerAgent:
         self.adk_agent = self._build_adk_agent()
 
     def _build_adk_agent(self) -> adk.Agent:
-        """Instantiate Google ADK Agent with deterministic tools."""
+        """Instantiate Google ADK Agent for single-turn structured design generation."""
         return adk.Agent(
             name="designer_agent",
             description="AgentForge Designer Agent for detailed agent and tool design",
             model=self.model_name,
             instruction=self.instruction,
-            tools=[
-                read_plan_json,
-                read_project_document,
-                read_schema,
-                validate_design_json,
-                write_design_json,
-            ],
+            tools=[],  # Direct single-turn JSON generation (no multi-turn tool loops)
         )
+
 
     def generate_design(
         self,
