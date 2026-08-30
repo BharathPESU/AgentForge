@@ -81,7 +81,11 @@ class VercelService:
             }
 
         url = f"{self.base_url}/v9/projects"
-        payload: Dict[str, Any] = {"name": project_name}
+        payload: Dict[str, Any] = {
+            "name": project_name,
+            "ssoProtection": None,
+            "passcodeProtection": None,
+        }
         if framework:
             payload["framework"] = framework
 
@@ -107,6 +111,29 @@ class VercelService:
             }
         except Exception as e:
             return {"status": "error", "code": 500, "message": str(e)}
+
+    def disable_deployment_protection(self, project_name: str) -> Dict[str, Any]:
+        """Disable Vercel SSO/Authentication deployment protection for public access.
+        
+        Args:
+            project_name: Name of the Vercel project.
+            
+        Returns:
+            Dict containing status and Vercel API response.
+        """
+        url = f"{self.base_url}/v9/projects/{project_name}"
+        payload = {
+            "ssoProtection": None,
+            "passcodeProtection": None,
+        }
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=body, headers=self._headers(), method="PATCH")
+        try:
+            with urllib.request.urlopen(req) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return {"status": "success", "data": data}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
     def set_environment_variable(
         self,

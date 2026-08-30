@@ -180,6 +180,7 @@ class DeployerAgent:
             )
 
         project_id = proj_res.get("project_id", vercel_proj_name)
+        v_service.disable_deployment_protection(project_name=vercel_proj_name)
 
         # Step 7: Configure GEMINI_API_KEY environment variable in Vercel
         v_service.set_environment_variable(
