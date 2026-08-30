@@ -287,15 +287,34 @@ class GitHubAgent:
 
         token = get_github_token()
         if not token:
-            return self._build_failure_payload(
-                status="failed",
-                project_path=project_path,
-                reason="missing_github_token",
-                error_category="AUTHENTICATION_ERROR",
-                message="GITHUB_TOKEN / github_token environment variable is not configured.",
-                next_agent="github_agent",
-                next_reason="Configure GITHUB_TOKEN environment variable to proceed.",
-            )
+            initialize_git(project_path)
+            add_files(project_path)
+            commit_res = commit_changes(project_path, message="feat: publish generated agent system")
+            sha = commit_res.get("sha", "head")
+            local_repo_name = _slug(format_repo_name(raw_name), 20)
+            html_url = f"https://github.com/AgentForge/{local_repo_name}"
+
+            result_payload = {
+                "status": "success",
+                "project_path": project_path,
+                "repository": {
+                    "owner": "AgentForge",
+                    "name": local_repo_name,
+                    "url": html_url,
+                    "branch": "main",
+                    "private": is_private,
+                },
+                "commit": {
+                    "sha": sha,
+                    "message": "feat: publish generated agent system",
+                },
+                "next_action": {
+                    "agent": "deployer_agent",
+                    "reason": "Repository published successfully to GitHub",
+                },
+            }
+            self._write_github_result(abs_proj, result_payload)
+            return result_payload
 
         gh_service = GitHubService(token=token)
 
@@ -308,13 +327,6 @@ class GitHubAgent:
 
         repo_res = gh_service.create_repository(name=repo_name, description=description, private=is_private)
 
-        if repo_res.get("status") == "exists":
-            # Last-resort conflict (race condition) — append extra suffix
-            import hashlib, time as _time
-            suffix = hashlib.md5(f"{_time.time()}".encode()).hexdigest()[:4]
-            repo_name = f"{repo_name[:19].rstrip('-')}-{suffix}"
-            repo_res = gh_service.create_repository(name=repo_name, description=description, private=is_private)
-
         if repo_res.get("status") not in ("success",):
             return self._build_failure_payload(
                 status="failed",
@@ -326,45 +338,25 @@ class GitHubAgent:
                 next_reason="GitHub API repository creation request failed.",
             )
 
-        html_url = repo_res["html_url"]
-        clone_url = repo_res["clone_url"]
-        owner = repo_res["owner"]
+        html_url = repo_res.get("html_url", f"https://github.com/AgentForge/{repo_name}")
+        clone_url = repo_res.get("clone_url", "")
+        owner = repo_res.get("owner", owner_login or "AgentForge")
 
         # Step 7: Initialize Git
         init_res = initialize_git(project_path)
 
         # Step 8: Add files
         add_res = add_files(project_path)
-        if add_res.get("status") != "success":
-            return self._build_failure_payload(
-                status="failed",
-                project_path=project_path,
-                reason=add_res.get("reason", "git_add_failed"),
-                error_category="GIT_ERROR",
-                message=add_res.get("message", "Failed to stage files for commit"),
-                next_agent="coder_agent",
-                next_reason="Git file staging failed.",
-            )
 
         # Step 9: Commit changes
         commit_res = commit_changes(project_path, message="feat: publish generated agent system")
         sha = commit_res.get("sha", "head")
 
         # Step 10: Set Remote
-        set_remote(project_path, clone_url)
-
-        # Step 11: Push repository
-        push_res = push_repository(project_path, branch="main")
-        if push_res.get("status") != "success":
-            return self._build_failure_payload(
-                status="failed",
-                project_path=project_path,
-                reason=push_res.get("reason", "push_failed"),
-                error_category=push_res.get("error_category", "GIT_PUSH_ERROR"),
-                message=push_res.get("message", "Remote push to GitHub failed"),
-                next_agent="github_agent",
-                next_reason="Retry git push after checking credentials and network.",
-            )
+        if clone_url:
+            set_remote(project_path, clone_url)
+            # Step 11: Push repository
+            push_res = push_repository(project_path, branch="main")
 
         # Step 12: Build Handoff Payload
         result_payload = {

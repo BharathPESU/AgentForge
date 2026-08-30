@@ -1,0 +1,34 @@
+{
+  "project_name": "support_triager",
+  "system_goal": "Build a Customer Support Triage system with specialized sub-agents for intent classification, sentiment analysis, and escalation routing.",
+  "architecture_pattern": "hierarchical",
+  "agents": [
+    {
+      "name": "intent_classifier",
+      "role": "Intent Classification Agent",
+      "instruction": "Classify incoming customer support tickets into intent categories (billing, technical, account, general).",
+      "tools": [
+        "parse_text",
+        "classify_intent"
+      ]
+    },
+    {
+      "name": "sentiment_analyzer",
+      "role": "Sentiment Analysis Agent",
+      "instruction": "Analyze customer sentiment (positive, neutral, urgent, frustrated) to determine priority.",
+      "tools": [
+        "sentiment_score",
+        "urgency_detector"
+      ]
+    },
+    {
+      "name": "escalation_router",
+      "role": "Escalation Routing Agent",
+      "instruction": "Route tickets based on intent and sentiment to human agents, automated response, or tier-2 support.",
+      "tools": [
+        "route_ticket",
+        "escalate_priority"
+      ]
+    }
+  ]
+}

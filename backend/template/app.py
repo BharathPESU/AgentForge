@@ -100,7 +100,7 @@ class GenericAgent:
         self.model_name = model_cfg.get("model_name", "gemini-3.5-flash")
         self.temperature = model_cfg.get("temperature", 0.2)
         
-        self.api_key = api_key or os.environ.get("GOOGLE_API_KEY")
+        self.api_key = api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
         self.client = genai.Client(api_key=self.api_key) if (self.api_key and GENAI_AVAILABLE) else None
 
     def run(self, prompt: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -166,7 +166,7 @@ class MultiAgentOrchestrator:
 
     def _initialize_agents(self):
         agents_list = self.config.get("agents", [])
-        api_key = os.environ.get("GOOGLE_API_KEY")
+        api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
         for ag_cfg in agents_list:
             ag_id = ag_cfg.get("id")
             if ag_id:

@@ -369,3 +369,106 @@ def check_independent_execution(project_path: str) -> Dict[str, Any]:
         "is_independent": len(violations) == 0,
         "violations": violations,
     }
+
+
+def run_sandboxed_execution_test(
+    project_path: str,
+    test_prompt: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Execute generated application code in a sandboxed subprocess to capture runtime stdout/stderr and verify live LLM output."""
+    safe_proj = _assert_in_workspace(project_path)
+    prompt = test_prompt or "Execute system analysis and report metrics."
+    
+    runner_script = os.path.join(safe_proj, "_test_sandbox_runner.py")
+    script_content = f"""import sys, os, json
+sys.path.insert(0, os.path.abspath('.'))
+from dotenv import load_dotenv
+load_dotenv()
+try:
+    from app import orchestrator
+    res = orchestrator.chat({json.dumps(prompt)})
+    print('SANDBOX_TEST_OUTPUT:' + json.dumps(res))
+except Exception as e:
+    import traceback
+    print('SANDBOX_TEST_ERROR:' + str(e))
+    traceback.print_exc()
+"""
+    try:
+        with open(runner_script, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        
+        cmd = f"python3 {runner_script}"
+        res = execute_command(cmd, cwd=safe_proj)
+    finally:
+        if os.path.isfile(runner_script):
+            try:
+                os.remove(runner_script)
+            except Exception:
+                pass
+
+    stdout = res.get("stdout", "")
+    stderr = res.get("stderr", "")
+    returncode = res.get("returncode", -1)
+
+    has_error = "SANDBOX_TEST_ERROR:" in stdout or returncode != 0
+    err_msg = ""
+    if "SANDBOX_TEST_ERROR:" in stdout:
+        err_msg = stdout.split("SANDBOX_TEST_ERROR:")[1].split("\n")[0]
+    elif stderr:
+        err_msg = stderr.strip().split("\n")[-1]
+
+    output_payload = ""
+    if "SANDBOX_TEST_OUTPUT:" in stdout:
+        output_payload = stdout.split("SANDBOX_TEST_OUTPUT:")[1].strip()
+
+    return {
+        "status": "passed" if not has_error else "failed",
+        "returncode": returncode,
+        "stdout": stdout,
+        "stderr": stderr,
+        "output_payload": output_payload,
+        "error_message": err_msg,
+    }
+
+
+def verify_execution_output(output_payload: str) -> Dict[str, Any]:
+    """Inspect sandboxed execution output payload to detect hardcoded template mock fallbacks or errors."""
+    if not output_payload:
+        return {
+            "valid": False,
+            "reason": "EMPTY_OUTPUT",
+            "message": "Sandboxed execution returned empty output payload.",
+        }
+
+    # If no API key is configured in environment (e.g. unit test mode), accept fallback response
+    api_key_present = bool(os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"))
+
+    # Template mock fallback markers
+    mock_markers = [
+        "Template Mock Mode",
+        "Generic template fallback",
+        "(Template Mock Mode)",
+        "Specialist_Agent_A",
+        "You are Specialist_Agent_A",
+        "Processed request successfully using `gemini-3.5-flash` (Template Mock Mode)",
+    ]
+
+    for marker in mock_markers:
+        if marker in output_payload:
+            if not api_key_present:
+                return {
+                    "valid": True,
+                    "reason": "MOCK_MODE_ALLOWED_NO_KEY",
+                    "message": f"Template mock marker '{marker}' accepted because GEMINI_API_KEY is not configured.",
+                }
+            return {
+                "valid": False,
+                "reason": "MOCK_OUTPUT_DETECTED",
+                "message": f"Generated code returned hardcoded template mock output containing '{marker}'. Code must connect to live LLM or project sub-agents.",
+            }
+
+    return {
+        "valid": True,
+        "reason": "LIVE_OUTPUT_VERIFIED",
+        "message": "Live agent output verified successfully without template mock markers.",
+    }

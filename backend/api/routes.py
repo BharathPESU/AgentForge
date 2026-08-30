@@ -7,7 +7,9 @@ and serving the complete ApiClient contract for the React frontend.
 
 import json
 import os
+import threading
 import time
+import uuid
 from typing import Any, Dict, Generator, List, Optional
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -26,6 +28,12 @@ router = APIRouter(prefix="/api", tags=["AgentForge"])
 BASE_GENERATED_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "generated")
 )
+
+# ─────────────────────────────────────────────────────────────
+# PIPELINE CANCELLATION REGISTRY
+# Maps run_id -> threading.Event; set the event to signal cancel.
+# ─────────────────────────────────────────────────────────────
+_cancel_registry: Dict[str, threading.Event] = {}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -138,6 +146,10 @@ class PipelineRunRequest(BaseModel):
         "architect",
         description="Pipeline stage to start execution from: 'architect' (full/initial) or 'coder' (resume after API key modal)"
     )
+    run_id: Optional[str] = Field(
+        None,
+        description="Unique run identifier used to cancel this specific pipeline run via /pipeline/cancel"
+    )
 
 
 class ArchitectStageRequest(BaseModel):
@@ -229,6 +241,21 @@ def _sse_event(data: Dict[str, Any]) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
 
+class PipelineCancelRequest(BaseModel):
+    run_id: str = Field(..., description="The run_id returned/used when starting the pipeline stream")
+
+
+@router.post("/pipeline/cancel", summary="Cancel a Running Pipeline Stream")
+def cancel_pipeline(req: PipelineCancelRequest) -> Dict[str, Any]:
+    """Signal a running /pipeline/stream to stop between stages."""
+    event = _cancel_registry.get(req.run_id)
+    if event is None:
+        # Already gone or never started — treat as success
+        return {"cancelled": False, "reason": "run_id not found (may have already completed)"}
+    event.set()
+    return {"cancelled": True, "run_id": req.run_id}
+
+
 @router.post("/pipeline/stream", summary="Stream Full Pipeline with Real-Time Stage Events")
 def stream_pipeline(req: PipelineRunRequest):
     """Execute 6-stage pipeline and stream real-time stage events via SSE.
@@ -249,116 +276,157 @@ def stream_pipeline(req: PipelineRunRequest):
     user_idea = req.user_idea
     gemini_api_key = req.gemini_api_key
 
+    # Create / register a cancellation event for this run
+    run_id = req.run_id or str(uuid.uuid4())
+    cancel_event = threading.Event()
+    _cancel_registry[run_id] = cancel_event
+
+    def _is_cancelled() -> bool:
+        return cancel_event.is_set()
+
     def event_stream() -> Generator[str, None, None]:
-        from backend.roundRobin import set_gemini_api_key_env
-        set_gemini_api_key_env()
+        try:
+            from backend.roundRobin import set_gemini_api_key_env
+            set_gemini_api_key_env()
 
-        architect   = ArchitectAgent()
-        designer    = DesignerAgent()
-        coder       = CoderAgent()
-        tester      = TesterAgent()
-        github_agt  = GitHubAgent()
-        deployer    = DeployerAgent()
+            # Send the run_id so the frontend can cancel this specific run
+            yield _sse_event({"stage_id": "__run_id__", "run_id": run_id})
 
-        start_stage = (req.start_stage or "architect").lower()
+            architect   = ArchitectAgent()
+            designer    = DesignerAgent()
+            coder       = CoderAgent()
+            tester      = TesterAgent()
+            github_agt  = GitHubAgent()
+            deployer    = DeployerAgent()
 
-        if start_stage == "architect":
-            # Stage 1 – Architect
-            yield _sse_event({"stage_id": "architect", "stage_name": "Architect Agent", "agent": "Atlas", "status": "running", "detail": "Generating plan.json…"})
-            try:
-                arch_res = architect.generate_plan(user_idea=user_idea, project_path=abs_path)
-                if arch_res.get("status") != "success":
-                    yield _sse_event({"stage_id": "architect", "stage_name": "Architect Agent", "agent": "Atlas", "status": "failed", "detail": str(arch_res.get("errors", "Unknown error"))})
+            start_stage = (req.start_stage or "architect").lower()
+
+            if start_stage == "architect":
+                # ── Stage 1 – Architect ──────────────────────────────────
+                if _is_cancelled():
+                    yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+                yield _sse_event({"stage_id": "architect", "stage_name": "Architect Agent", "agent": "Atlas", "status": "running", "detail": "Generating plan.json…"})
+                try:
+                    arch_res = architect.generate_plan(user_idea=user_idea, project_path=abs_path)
+                    if _is_cancelled():
+                        yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+                    if arch_res.get("status") != "success":
+                        yield _sse_event({"stage_id": "architect", "stage_name": "Architect Agent", "agent": "Atlas", "status": "failed", "detail": str(arch_res.get("errors", "Unknown error"))})
+                        yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "architect"})
+                        return
+                    yield _sse_event({"stage_id": "architect", "stage_name": "Architect Agent", "agent": "Atlas", "status": "completed", "detail": "plan.json generated", "result": {"file": arch_res.get("file_path", "")}})
+                except Exception as exc:
+                    yield _sse_event({"stage_id": "architect", "stage_name": "Architect Agent", "agent": "Atlas", "status": "failed", "detail": str(exc)})
                     yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "architect"})
                     return
-                yield _sse_event({"stage_id": "architect", "stage_name": "Architect Agent", "agent": "Atlas", "status": "completed", "detail": "plan.json generated", "result": {"file": arch_res.get("file_path", "")}})
-            except Exception as exc:
-                yield _sse_event({"stage_id": "architect", "stage_name": "Architect Agent", "agent": "Atlas", "status": "failed", "detail": str(exc)})
-                yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "architect"})
-                return
 
-            # Stage 2 – Designer
-            yield _sse_event({"stage_id": "designer", "stage_name": "Designer Agent", "agent": "Mori", "status": "running", "detail": "Generating design.json & agent wiring…"})
-            try:
-                des_res = designer.generate_design(project_path=abs_path)
-                if des_res.get("status") != "success":
-                    yield _sse_event({"stage_id": "designer", "stage_name": "Designer Agent", "agent": "Mori", "status": "failed", "detail": str(des_res.get("errors", "Unknown error"))})
+                # ── Stage 2 – Designer ───────────────────────────────────
+                if _is_cancelled():
+                    yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+                yield _sse_event({"stage_id": "designer", "stage_name": "Designer Agent", "agent": "Mori", "status": "running", "detail": "Generating design.json & agent wiring…"})
+                try:
+                    des_res = designer.generate_design(project_path=abs_path)
+                    if _is_cancelled():
+                        yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+                    if des_res.get("status") != "success":
+                        yield _sse_event({"stage_id": "designer", "stage_name": "Designer Agent", "agent": "Mori", "status": "failed", "detail": str(des_res.get("errors", "Unknown error"))})
+                        yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "designer"})
+                        return
+                    design_data = des_res.get("design", {})
+                    sub_agents = [a.get("name", "") for a in design_data.get("agents", [])]
+                    yield _sse_event({"stage_id": "designer", "stage_name": "Designer Agent", "agent": "Mori", "status": "completed", "detail": f"design.json generated — {len(sub_agents)} sub-agents wired: {', '.join(sub_agents)}", "result": {"sub_agents": sub_agents, "file": des_res.get("file_path", "")}})
+                except Exception as exc:
+                    yield _sse_event({"stage_id": "designer", "stage_name": "Designer Agent", "agent": "Mori", "status": "failed", "detail": str(exc)})
                     yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "designer"})
                     return
-                design_data = des_res.get("design", {})
-                sub_agents = [a.get("name", "") for a in design_data.get("agents", [])]
-                yield _sse_event({"stage_id": "designer", "stage_name": "Designer Agent", "agent": "Mori", "status": "completed", "detail": f"design.json generated — {len(sub_agents)} sub-agents wired: {', '.join(sub_agents)}", "result": {"sub_agents": sub_agents, "file": des_res.get("file_path", "")}})
-            except Exception as exc:
-                yield _sse_event({"stage_id": "designer", "stage_name": "Designer Agent", "agent": "Mori", "status": "failed", "detail": str(exc)})
-                yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "designer"})
-                return
 
-        # Stage 3 – Coder
-        yield _sse_event({"stage_id": "coder", "stage_name": "Coder Agent", "agent": "Kite", "status": "running", "detail": "Generating agent.py and project modules…"})
-        try:
-            cod_res = coder.generate_code(project_path=abs_path, gemini_api_key=gemini_api_key)
-            if cod_res.get("status") != "success":
-                yield _sse_event({"stage_id": "coder", "stage_name": "Coder Agent", "agent": "Kite", "status": "failed", "detail": str(cod_res.get("errors", "Unknown error"))})
+            # ── Stage 3 – Coder ──────────────────────────────────────────
+            if _is_cancelled():
+                yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+            yield _sse_event({"stage_id": "coder", "stage_name": "Coder Agent", "agent": "Kite", "status": "running", "detail": "Generating agent.py and project modules…"})
+            try:
+                cod_res = coder.generate_code(project_path=abs_path, gemini_api_key=gemini_api_key)
+                if _is_cancelled():
+                    yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+                if cod_res.get("status") != "success":
+                    yield _sse_event({"stage_id": "coder", "stage_name": "Coder Agent", "agent": "Kite", "status": "failed", "detail": str(cod_res.get("errors", "Unknown error"))})
+                    yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "coder"})
+                    return
+                files = cod_res.get("files_created", [])
+                yield _sse_event({"stage_id": "coder", "stage_name": "Coder Agent", "agent": "Kite", "status": "completed", "detail": f"agent.py generated ({len(files)} files created)", "result": {"files": files}})
+            except Exception as exc:
+                yield _sse_event({"stage_id": "coder", "stage_name": "Coder Agent", "agent": "Kite", "status": "failed", "detail": str(exc)})
                 yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "coder"})
                 return
-            files = cod_res.get("files_created", [])
-            yield _sse_event({"stage_id": "coder", "stage_name": "Coder Agent", "agent": "Kite", "status": "completed", "detail": f"agent.py generated ({len(files)} files created)", "result": {"files": files}})
-        except Exception as exc:
-            yield _sse_event({"stage_id": "coder", "stage_name": "Coder Agent", "agent": "Kite", "status": "failed", "detail": str(exc)})
-            yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "coder"})
-            return
 
-        # Stage 4 – Tester (with retry feedback)
-        yield _sse_event({"stage_id": "tester", "stage_name": "Tester Agent", "agent": "Sentry", "status": "running", "detail": "Validating project — running test suite…"})
-        try:
-            test_res = tester.validate_project(project_path=abs_path)
-            retry_count = 0
-            while test_res.get("status") == "failed" and retry_count < MAX_CODER_RETRIES:
-                retry_count += 1
-                yield _sse_event({"stage_id": "tester", "stage_name": "Tester Agent", "agent": "Sentry", "status": "retrying", "detail": f"Test failed — Coder retry {retry_count}/{MAX_CODER_RETRIES}…"})
-                coder.generate_code(project_path=abs_path, gemini_api_key=gemini_api_key)
+            # ── Stage 4 – Tester ─────────────────────────────────────────
+            if _is_cancelled():
+                yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+            yield _sse_event({"stage_id": "tester", "stage_name": "Tester Agent", "agent": "Sentry", "status": "running", "detail": "Validating project — running test suite…"})
+            try:
                 test_res = tester.validate_project(project_path=abs_path)
-            if test_res.get("status") != "passed":
-                yield _sse_event({"stage_id": "tester", "stage_name": "Tester Agent", "agent": "Sentry", "status": "failed", "detail": f"Validation failed after {retry_count} retries", "result": {"failures": test_res.get("failures", [])}})
+                retry_count = 0
+                while test_res.get("status") == "failed" and retry_count < MAX_CODER_RETRIES:
+                    if _is_cancelled():
+                        yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+                    retry_count += 1
+                    yield _sse_event({"stage_id": "tester", "stage_name": "Tester Agent", "agent": "Sentry", "status": "retrying", "detail": f"Test failed — Coder retry {retry_count}/{MAX_CODER_RETRIES}…"})
+                    coder.generate_code(project_path=abs_path, gemini_api_key=gemini_api_key)
+                    test_res = tester.validate_project(project_path=abs_path)
+                if _is_cancelled():
+                    yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+                if test_res.get("status") != "passed":
+                    yield _sse_event({"stage_id": "tester", "stage_name": "Tester Agent", "agent": "Sentry", "status": "failed", "detail": f"Validation failed after {retry_count} retries", "result": {"failures": test_res.get("failures", [])}})
+                    yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "tester"})
+                    return
+                yield _sse_event({"stage_id": "tester", "stage_name": "Tester Agent", "agent": "Sentry", "status": "completed", "detail": f"test_result.json — all tests passed (retries: {retry_count})", "result": {"retries": retry_count}})
+            except Exception as exc:
+                yield _sse_event({"stage_id": "tester", "stage_name": "Tester Agent", "agent": "Sentry", "status": "failed", "detail": str(exc)})
                 yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "tester"})
                 return
-            yield _sse_event({"stage_id": "tester", "stage_name": "Tester Agent", "agent": "Sentry", "status": "completed", "detail": f"test_result.json — all tests passed (retries: {retry_count})", "result": {"retries": retry_count}})
-        except Exception as exc:
-            yield _sse_event({"stage_id": "tester", "stage_name": "Tester Agent", "agent": "Sentry", "status": "failed", "detail": str(exc)})
-            yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "tester"})
-            return
 
-        # Stage 5 – GitHub
-        yield _sse_event({"stage_id": "github", "stage_name": "GitHub Agent", "agent": "Pulse", "status": "running", "detail": "Publishing repository to GitHub…"})
-        try:
-            gh_res = github_agt.publish_repository(project_path=abs_path)
-            if gh_res.get("status") != "success":
-                yield _sse_event({"stage_id": "github", "stage_name": "GitHub Agent", "agent": "Pulse", "status": "failed", "detail": str(gh_res.get("message", "GitHub push failed"))})
+            # ── Stage 5 – GitHub ─────────────────────────────────────────
+            if _is_cancelled():
+                yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+            yield _sse_event({"stage_id": "github", "stage_name": "GitHub Agent", "agent": "Pulse", "status": "running", "detail": "Publishing repository to GitHub…"})
+            try:
+                gh_res = github_agt.publish_repository(project_path=abs_path)
+                if _is_cancelled():
+                    yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+                if gh_res.get("status") != "success":
+                    yield _sse_event({"stage_id": "github", "stage_name": "GitHub Agent", "agent": "Pulse", "status": "failed", "detail": str(gh_res.get("message", "GitHub push failed"))})
+                    yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "github"})
+                    return
+                repo_url = gh_res.get("repository", {}).get("url", "")
+                yield _sse_event({"stage_id": "github", "stage_name": "GitHub Agent", "agent": "Pulse", "status": "completed", "detail": f"github_result.json — repository published: {repo_url}", "result": {"url": repo_url}})
+            except Exception as exc:
+                yield _sse_event({"stage_id": "github", "stage_name": "GitHub Agent", "agent": "Pulse", "status": "failed", "detail": str(exc)})
                 yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "github"})
                 return
-            repo_url = gh_res.get("repository", {}).get("url", "")
-            yield _sse_event({"stage_id": "github", "stage_name": "GitHub Agent", "agent": "Pulse", "status": "completed", "detail": f"github_result.json — repository published: {repo_url}", "result": {"url": repo_url}})
-        except Exception as exc:
-            yield _sse_event({"stage_id": "github", "stage_name": "GitHub Agent", "agent": "Pulse", "status": "failed", "detail": str(exc)})
-            yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "github"})
-            return
 
-        # Stage 6 – Deployer
-        yield _sse_event({"stage_id": "deployer", "stage_name": "Deployer Agent", "agent": "Harbor", "status": "running", "detail": "Deploying to Vercel…"})
-        try:
-            dep_res = deployer.deploy_project(project_path=abs_path, gemini_api_key=gemini_api_key)
-            if dep_res.get("status") != "success":
-                yield _sse_event({"stage_id": "deployer", "stage_name": "Deployer Agent", "agent": "Harbor", "status": "failed", "detail": str(dep_res.get("failure", {}).get("message", "Deploy failed"))})
+            # ── Stage 6 – Deployer ───────────────────────────────────────
+            if _is_cancelled():
+                yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+            yield _sse_event({"stage_id": "deployer", "stage_name": "Deployer Agent", "agent": "Harbor", "status": "running", "detail": "Deploying to Vercel…"})
+            try:
+                dep_res = deployer.deploy_project(project_path=abs_path, gemini_api_key=gemini_api_key)
+                if _is_cancelled():
+                    yield _sse_event({"stage_id": "__done__", "status": "cancelled"}); return
+                if dep_res.get("status") != "success":
+                    yield _sse_event({"stage_id": "deployer", "stage_name": "Deployer Agent", "agent": "Harbor", "status": "failed", "detail": str(dep_res.get("failure", {}).get("message", "Deploy failed"))})
+                    yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "deployer"})
+                    return
+                vercel_url = dep_res.get("vercel", {}).get("deployment_url", "")
+                yield _sse_event({"stage_id": "deployer", "stage_name": "Deployer Agent", "agent": "Harbor", "status": "completed", "detail": f"deployment_result.json — live at: {vercel_url}", "result": {"url": vercel_url}})
+            except Exception as exc:
+                yield _sse_event({"stage_id": "deployer", "stage_name": "Deployer Agent", "agent": "Harbor", "status": "failed", "detail": str(exc)})
                 yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "deployer"})
                 return
-            vercel_url = dep_res.get("vercel", {}).get("deployment_url", "")
-            yield _sse_event({"stage_id": "deployer", "stage_name": "Deployer Agent", "agent": "Harbor", "status": "completed", "detail": f"deployment_result.json — live at: {vercel_url}", "result": {"url": vercel_url}})
-        except Exception as exc:
-            yield _sse_event({"stage_id": "deployer", "stage_name": "Deployer Agent", "agent": "Harbor", "status": "failed", "detail": str(exc)})
-            yield _sse_event({"stage_id": "__done__", "status": "failed", "failed_at": "deployer"})
-            return
 
-        yield _sse_event({"stage_id": "__done__", "status": "success", "project_path": abs_path})
+            yield _sse_event({"stage_id": "__done__", "status": "success", "project_path": abs_path})
+        finally:
+            # Always clean up the cancel event from the registry
+            _cancel_registry.pop(run_id, None)
 
     return StreamingResponse(
         event_stream(),

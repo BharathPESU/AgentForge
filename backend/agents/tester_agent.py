@@ -19,6 +19,7 @@ from backend.tools.tester_tools import (
     list_directory,
     read_file,
     run_agent_interaction_test,
+    run_sandboxed_execution_test,
     run_smoke_test,
     run_test,
     run_test_suite,
@@ -26,6 +27,7 @@ from backend.tools.tester_tools import (
     search_files,
     validate_design,
     validate_plan,
+    verify_execution_output,
 )
 
 from backend.roundRobin import set_gemini_api_key_env
@@ -86,6 +88,8 @@ class TesterAgent:
                 check_agent_wiring,
                 run_agent_interaction_test,
                 run_smoke_test,
+                run_sandboxed_execution_test,
+                verify_execution_output,
                 check_vercel_structure,
                 scan_for_secrets,
                 check_independent_execution,
@@ -296,6 +300,35 @@ class TesterAgent:
                 "recommended_action": "Ensure root agent and fast_api app initialize cleanly",
             })
 
+        # Step 11b: Sandboxed Terminal Execution & Output Verification
+        sandbox_prompt = plan_data.get("project", {}).get("description", "Execute system analysis and report metrics.")
+        sandbox_res = run_sandboxed_execution_test(project_path, test_prompt=sandbox_prompt)
+        val_out = verify_execution_output(sandbox_res.get("output_payload", ""))
+
+        sandbox_check_status = "passed"
+        if sandbox_res["status"] != "passed":
+            sandbox_check_status = "failed"
+            failures.append({
+                "test": "sandboxed_execution",
+                "category": "RUNTIME_ERROR",
+                "severity": "critical",
+                "file": "app.py",
+                "message": f"Sandboxed execution failed with error: {sandbox_res.get('error_message')}",
+                "responsible_agent": "coder_agent",
+                "recommended_action": "Ensure app.py and agent.py execute without runtime exceptions",
+            })
+        elif not val_out["valid"]:
+            sandbox_check_status = "failed"
+            failures.append({
+                "test": "output_verification",
+                "category": val_out.get("reason", "MOCK_OUTPUT_DETECTED"),
+                "severity": "high",
+                "file": "app.py",
+                "message": val_out["message"],
+                "responsible_agent": "coder_agent",
+                "recommended_action": "Fix app.py/agent.py to properly execute live LLM sub-agent logic and remove hardcoded mock template fallbacks.",
+            })
+
         # Step 12: Vercel Structure
         vercel_res = check_vercel_structure(project_path)
         vercel_check_status = "passed" if vercel_res["valid"] else "failed"
@@ -355,6 +388,7 @@ class TesterAgent:
             "communication": "passed",
             "tests": tests_check_status,
             "smoke_test": smoke_check_status,
+            "sandboxed_execution": sandbox_check_status,
             "vercel_structure": vercel_check_status,
             "secrets": secrets_check_status,
             "independent_run": indep_check_status,

@@ -39,6 +39,8 @@ Do NOT trust any single source independently. Compare all four.
 
 **STEP 11** — Smoke test: attempt to import the root agent and FastAPI app. Call health endpoint if possible.
 
+**STEP 11b** — Sandboxed Terminal Execution & Output Verification: Use `run_sandboxed_execution_test` to execute generated application code in a sandboxed subprocess with sample inputs. Run `verify_execution_output` on the returned response payload to verify that the output is NOT hardcoded template mock output (`Template Mock Mode`, `Generic template fallback`, etc.). If sandboxed execution throws an exception or returns hardcoded mock output, mark `FAIL` with `category=MOCK_OUTPUT_DETECTED` or `RUNTIME_ERROR` and set `responsible_agent=coder_agent`.
+
 **STEP 12** — Vercel structure: verify `api/` directory or `fast_api.py` entry point and `requirements.txt` are present. Do NOT deploy.
 
 **STEP 13** — Secret scan: search source files, config, and README for hard-coded API keys. If found: `FAIL, category=SECURITY_ERROR, severity=critical`. Never echo actual secrets.
@@ -58,6 +60,7 @@ Use these categories precisely:
 - `SECURITY_ERROR` → responsible: `coder_agent`
 - `DEPLOYMENT_STRUCTURE_ERROR` → responsible: `coder_agent`
 - `RUNTIME_ERROR` → responsible: `coder_agent`
+- `MOCK_OUTPUT_DETECTED` → responsible: `coder_agent`
 - `TEST_ERROR` → responsible: `coder_agent`
 - `COMMUNICATION_ERROR` → responsible: `coder_agent`
 
