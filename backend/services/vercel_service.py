@@ -83,8 +83,6 @@ class VercelService:
         url = f"{self.base_url}/v9/projects"
         payload: Dict[str, Any] = {
             "name": project_name,
-            "ssoProtection": None,
-            "passcodeProtection": None,
         }
         if framework:
             payload["framework"] = framework
@@ -124,7 +122,6 @@ class VercelService:
         url = f"{self.base_url}/v9/projects/{project_name}"
         payload = {
             "ssoProtection": None,
-            "passcodeProtection": None,
         }
         body = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=body, headers=self._headers(), method="PATCH")
