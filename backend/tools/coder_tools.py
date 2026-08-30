@@ -6,6 +6,7 @@ No shell access outside the workspace is permitted.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -31,6 +32,19 @@ def _assert_in_workspace(path: str) -> str:
     if not (abs_path.startswith(WORKSPACE_ROOT) or abs_path.startswith(temp_dir)):
         raise ValueError(f"Access denied: '{path}' is outside AgentForge workspace.")
     return abs_path
+
+
+def sanitize_tool_name(raw_name: str) -> str:
+    """Sanitize raw tool name into a valid Python function identifier."""
+    if not raw_name:
+        return "custom_tool"
+    clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', str(raw_name)).lower()
+    clean_name = re.sub(r'_+', '_', clean_name).strip('_')
+    if not clean_name:
+        return "custom_tool"
+    if clean_name[0].isdigit():
+        return f"tool_{clean_name}"
+    return clean_name
 
 
 

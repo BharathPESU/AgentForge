@@ -260,7 +260,9 @@ class CoderAgent:
             return '\n'.join(lines)
 
         for tool in tools_spec:
-            t_name = tool.get("name", "custom_tool")
+            raw_name = tool.get("name", "custom_tool")
+            from backend.tools.coder_tools import sanitize_tool_name
+            t_name = sanitize_tool_name(raw_name)
             t_desc = tool.get("description", f"Tool {t_name}")
             t_purpose = tool.get("purpose", "")
             tool_names.append(t_name)
@@ -274,7 +276,7 @@ class CoderAgent:
             lines.append('    return {')
             lines.append('        "status": "success",')
             lines.append(f'        "tool": "{t_name}",')
-            lines.append('        "result": f"Executed {t_name} with query: \'{query}\'",')
+            lines.append(f'        "result": f"Executed {t_name} with query: \'{{query}}\'",')
             lines.append('    }')
             lines.append('')
 

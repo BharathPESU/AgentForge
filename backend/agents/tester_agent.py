@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import uuid
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
@@ -241,19 +242,22 @@ class TesterAgent:
             if os.path.isfile(tools_file):
                 with open(tools_file, "r", encoding="utf-8") as f:
                     code = f.read()
+                from backend.tools.coder_tools import sanitize_tool_name
                 for tool in agent_spec.get("tools", []):
-                    tname = tool.get("name")
-                    if tname and f"def {tname}" not in code:
-                        tools_check_status = "failed"
-                        failures.append({
-                            "test": f"tool_{aid}_{tname}",
-                            "category": "IMPLEMENTATION_ERROR",
-                            "severity": "medium",
-                            "file": f"agents/{aid}/tools.py",
-                            "message": f"Assigned tool '{tname}' not defined in agents/{aid}/tools.py",
-                            "responsible_agent": "coder_agent",
-                            "recommended_action": f"Implement function {tname} in agents/{aid}/tools.py",
-                        })
+                    traw = tool.get("name")
+                    if traw:
+                        tname = sanitize_tool_name(traw)
+                        if f"def {tname}" not in code and f"def {traw}" not in code:
+                            tools_check_status = "failed"
+                            failures.append({
+                                "test": f"tool_{aid}_{tname}",
+                                "category": "IMPLEMENTATION_ERROR",
+                                "severity": "medium",
+                                "file": f"agents/{aid}/tools.py",
+                                "message": f"Assigned tool '{tname}' not defined in agents/{aid}/tools.py",
+                                "responsible_agent": "coder_agent",
+                                "recommended_action": f"Implement function {tname} in agents/{aid}/tools.py",
+                            })
 
         # Step 8: Wiring Verification
         wiring_res = check_agent_wiring(project_path)
