@@ -272,3 +272,20 @@ def test_10_test_result_json_output(temp_project_dir, sample_plan, sample_design
     assert loaded["status"] == res["status"]
     assert "checks" in loaded
     assert "next_action" in loaded
+
+
+def test_11_local_server_curl_test(temp_project_dir, sample_plan, sample_design):
+    """Test 11 — Verifies local server sandboxed build, startup, and curl endpoint tests."""
+    write_plan_json(temp_project_dir, sample_plan)
+    write_design_json(temp_project_dir, sample_design, sample_plan)
+
+    coder = CoderAgent()
+    coder.generate_code(project_path=temp_project_dir)
+
+    from backend.tools.tester_tools import run_local_server_and_curl_test
+    curl_res = run_local_server_and_curl_test(temp_project_dir, test_prompt="Ping test.")
+    assert curl_res["status"] == "passed"
+    assert curl_res["health_check"]["returncode"] == 0
+    assert curl_res["agents_check"]["returncode"] == 0
+    assert curl_res["chat_check"]["returncode"] == 0
+

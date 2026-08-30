@@ -2,6 +2,14 @@
 
 All notable changes to AgentForge will be documented in this file.
 
+## [0.9.6] - 2026-08-30
+
+### Added
+- Implemented Sandboxed Local Server Build and `curl` API endpoint testing in `TesterAgent` (`backend/tools/tester_tools.py`, `backend/agents/tester_agent.py`).
+- Tester Agent launches generated FastAPI application locally in a sandboxed process and executes `curl` requests against `/health`, `/agents`, and `/chat` endpoints.
+- Strict gatekeeping: Tester Agent passes handoff to `github_agent` and `deployer_agent` **only** when local server build and all `curl` endpoint tests succeed with valid result data.
+- Automatically disabled Vercel SSO/Deployment Protection on project creation (`backend/services/vercel_service.py`, `backend/agents/deployer_agent.py`) so deployed links are immediately publicly accessible.
+
 ## [0.9.5] - 2026-08-30
 
 ### Added

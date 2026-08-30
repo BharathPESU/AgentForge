@@ -32,8 +32,8 @@
 2. Tester Agent validates architecture and design schemas; if invalid, marks `status: blocked` and routes back to Architect or Designer.
 3. Tester Agent verifies project structure, agent modules, tool definitions, and root agent wiring.
 4. Tester Agent generates and executes unit test suites using pytest.
-5. Tester Agent executes smoke test, verifies Vercel structure compatibility, scans for secret exposure, and checks independent execution.
-6. Tester Agent outputs `docs/test_result.json` specifying overall status (`passed`, `failed`, or `blocked`) and next action handoff (`github_agent` or `coder_agent`).
+5. Tester Agent executes smoke test, runs sandboxed terminal execution, launches local FastAPI server in sandboxed environment, executes `curl` requests against `/health`, `/agents`, and `/chat` endpoints, verifies Vercel structure compatibility, scans for secret exposure, and checks independent execution.
+6. Tester Agent outputs `docs/test_result.json` specifying overall status (`passed`, `failed`, or `blocked`) and next action handoff (`github_agent` if all checks pass including local server curl tests, or `coder_agent` on failure).
 
 ## Stage 5: GitHub Integration (Implemented)
 

@@ -20,6 +20,7 @@ from backend.tools.tester_tools import (
     list_directory,
     read_file,
     run_agent_interaction_test,
+    run_local_server_and_curl_test,
     run_sandboxed_execution_test,
     run_smoke_test,
     run_test,
@@ -333,6 +334,20 @@ class TesterAgent:
                 "recommended_action": "Fix app.py/agent.py to properly execute live LLM sub-agent logic and remove hardcoded mock template fallbacks.",
             })
 
+        # Step 11c: Sandboxed Local Server Launch & Curl API Endpoints Verification
+        local_curl_res = run_local_server_and_curl_test(project_path, test_prompt=sandbox_prompt)
+        local_curl_check_status = local_curl_res["status"]
+        if local_curl_check_status != "passed":
+            failures.append({
+                "test": "local_server_curl_test",
+                "category": "LOCAL_SERVER_API_ERROR",
+                "severity": "critical",
+                "file": "app.py",
+                "message": f"Local server build & curl endpoint test failed: {local_curl_res.get('error_message')}",
+                "responsible_agent": "coder_agent",
+                "recommended_action": "Fix local server app.py entrypoint and API endpoint routing so curl requests succeed.",
+            })
+
         # Step 12: Vercel Structure
         vercel_res = check_vercel_structure(project_path)
         vercel_check_status = "passed" if vercel_res["valid"] else "failed"
@@ -393,6 +408,7 @@ class TesterAgent:
             "tests": tests_check_status,
             "smoke_test": smoke_check_status,
             "sandboxed_execution": sandbox_check_status,
+            "local_server_curl_test": local_curl_check_status,
             "vercel_structure": vercel_check_status,
             "secrets": secrets_check_status,
             "independent_run": indep_check_status,

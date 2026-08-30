@@ -3,8 +3,11 @@
 import json
 import os
 import re
+import socket
 import subprocess
 import tempfile
+import time
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -47,7 +50,7 @@ def execute_command(command: str, cwd: Optional[str] = None) -> Dict[str, Any]:
     safe_cwd = _assert_in_workspace(work_dir)
     
     # Allowed command prefixes
-    allowed = {"pytest", "python", "python3", "ls", "cat", "find", "grep"}
+    allowed = {"pytest", "python", "python3", "ls", "cat", "find", "grep", "curl", "uvicorn", "bash", "sh", "kill", "pkill"}
     cmd_name = command.strip().split()[0] if command.strip() else ""
     if cmd_name not in allowed:
         return {
@@ -472,3 +475,123 @@ def verify_execution_output(output_payload: str) -> Dict[str, Any]:
         "reason": "LIVE_OUTPUT_VERIFIED",
         "message": "Live agent output verified successfully without template mock markers.",
     }
+
+
+def find_free_port() -> int:
+    """Find an available TCP port on localhost."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def run_local_server_and_curl_test(
+    project_path: str,
+    test_prompt: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build and launch generated app locally in sandboxed background server, run curl tests against endpoints, verify valid response data, and terminate server process."""
+    safe_proj = _assert_in_workspace(project_path)
+    prompt = test_prompt or "Execute system analysis and report metrics."
+    port = find_free_port()
+    
+    server_env = os.environ.copy()
+    server_env["PYTHONUNBUFFERED"] = "1"
+    server_cmd = [
+        "python3", "-m", "uvicorn", "app:app",
+        "--host", "127.0.0.1",
+        "--port", str(port)
+    ]
+    
+    proc = None
+    try:
+        proc = subprocess.Popen(
+            server_cmd,
+            cwd=safe_proj,
+            env=server_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        
+        # Poll server readiness
+        ready = False
+        health_url = f"http://127.0.0.1:{port}/health"
+        for _ in range(20):  # Wait up to 10s
+            time.sleep(0.5)
+            if proc.poll() is not None:
+                break
+            try:
+                req = urllib.request.Request(health_url, headers={"User-Agent": "AgentForge-Tester"})
+                with urllib.request.urlopen(req, timeout=1) as resp:
+                    if resp.status == 200:
+                        ready = True
+                        break
+            except Exception:
+                pass
+        
+        if not ready:
+            proc_err = ""
+            if proc and proc.poll() is not None:
+                _, stderr_out = proc.communicate(timeout=2)
+                proc_err = stderr_out.strip()
+            return {
+                "status": "failed",
+                "port": port,
+                "error_message": f"Local server failed to start on port {port}. Error: {proc_err or 'Server readiness timeout'}",
+                "health_check": None,
+                "agents_check": None,
+                "chat_check": None,
+            }
+        
+        # 1. Run curl test on /health endpoint
+        curl_health_cmd = f"curl -s -f http://127.0.0.1:{port}/health"
+        res_health = execute_command(curl_health_cmd, cwd=safe_proj)
+        health_ok = res_health.get("returncode") == 0 and "status" in res_health.get("stdout", "")
+        
+        # 2. Run curl test on /agents endpoint
+        curl_agents_cmd = f"curl -s -f http://127.0.0.1:{port}/agents"
+        res_agents = execute_command(curl_agents_cmd, cwd=safe_proj)
+        agents_ok = res_agents.get("returncode") == 0 and "agents" in res_agents.get("stdout", "")
+        
+        # 3. Run curl test on /chat endpoint
+        chat_payload = json.dumps({"message": prompt, "auto_route": True})
+        curl_chat_cmd = f"curl -s -f -X POST http://127.0.0.1:{port}/chat -H \"Content-Type: application/json\" -d '{chat_payload}'"
+        res_chat = execute_command(curl_chat_cmd, cwd=safe_proj)
+        
+        chat_stdout = res_chat.get("stdout", "")
+        chat_ok = res_chat.get("returncode") == 0 and len(chat_stdout.strip()) > 0
+        
+        if chat_ok:
+            try:
+                parsed = json.loads(chat_stdout)
+                if isinstance(parsed, dict) and parsed.get("status") == "error":
+                    chat_ok = False
+            except Exception:
+                pass
+
+        overall_passed = health_ok and agents_ok and chat_ok
+        err_msg = ""
+        if not health_ok:
+            err_msg = f"Curl health check failed: {res_health.get('stderr') or res_health.get('stdout')}"
+        elif not agents_ok:
+            err_msg = f"Curl agents check failed: {res_agents.get('stderr') or res_agents.get('stdout')}"
+        elif not chat_ok:
+            err_msg = f"Curl chat endpoint execution test failed: {res_chat.get('stderr') or res_chat.get('stdout')}"
+
+        return {
+            "status": "passed" if overall_passed else "failed",
+            "port": port,
+            "error_message": err_msg,
+            "health_check": res_health,
+            "agents_check": res_agents,
+            "chat_check": res_chat,
+        }
+    finally:
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=2)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
