@@ -54,3 +54,16 @@
 5. Deployer Agent deploys generated project files to Vercel (`POST /v13/deployments`).
 6. Deployer Agent verifies deployment status and HTTP URL accessibility.
 7. Deployer Agent outputs `docs/deployment_result.json` containing GitHub repository URL and Vercel deployment URL.
+
+---
+
+## Shared Execution Context & Memory Integration
+
+Throughout Stages 1 through 6, AgentForge maintains an additive shared execution context (`backend/services/context_service.py`):
+- **Stage Initialization**: On run start, `ContextService.create_run_context()` creates a new context (`run_id`, `project_id`, `user_idea`).
+- **Stage Transitions**: As each stage begins, `ContextService.set_current_stage()` updates the active stage to `in_progress`.
+- **Artifact Registration**: Upon stage completion, outputs are registered as artifact references in `context.json`.
+- **Targeted Context Injection**: Downstream agents receive compact context blocks formatted by `ContextSelector` and `ContextPromptBuilder`.
+- **Retry Continuity**: During Tester -> Coder retry loops, the same context is maintained with incremented attempt numbers.
+- **Fallback**: If context is disabled (`AGENT_CONTEXT_ENABLED=false`), agents revert seamlessly to direct disk artifact reads.
+
