@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentForge Shared Run Context Schema",
+  "type": "object",
+  "required": [
+    "run_id",
+    "project_id",
+    "user_idea",
+    "current_stage",
+    "stage_status",
+    "artifacts",
+    "events"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "Unique identifier for execution run"
+    },
+    "user_id": {
+      "type": "string",
+      "description": "Owner user identifier",
+      "default": "user_default"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Target project identifier"
+    },
+    "user_idea": {
+      "type": "string",
+      "description": "Original natural language user prompt"
+    },
+    "current_stage": {
+      "type": "string",
+      "enum": [
+        "architect",
+        "designer",
+        "coder",
+        "tester",
+        "github",
+        "deployer",
+        "completed",
+        "failed"
+      ],
+      "description": "Active or completed compiler stage"
+    },
+    "stage_status": {
+      "type": "object",
+      "properties": {
+        "architect": { "type": "string", "enum": ["waiting", "in_progress", "completed", "failed", "retrying"] },
+        "designer": { "type": "string", "enum": ["waiting", "in_progress", "completed", "failed", "retrying"] },
+        "coder": { "type": "string", "enum": ["waiting", "in_progress", "completed", "failed", "retrying"] },
+        "tester": { "type": "string", "enum": ["waiting", "in_progress", "completed", "failed", "retrying"] },
+        "github": { "type": "string", "enum": ["waiting", "in_progress", "completed", "failed", "retrying"] },
+        "deployer": { "type": "string", "enum": ["waiting", "in_progress", "completed", "failed", "retrying"] }
+      },
+      "additionalProperties": true
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["artifact_type", "path"],
+        "properties": {
+          "artifact_type": { "type": "string" },
+          "path": { "type": "string" },
+          "stage": { "type": "string" },
+          "status": { "type": "string" },
+          "summary": { "type": "string" }
+        }
+      }
+    },
+    "context_summary": {
+      "type": "string",
+      "default": ""
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["stage", "status", "timestamp"],
+        "properties": {
+          "stage": { "type": "string" },
+          "status": { "type": "string" },
+          "summary": { "type": "string" },
+          "artifact": { "type": "string" },
+          "attempt": { "type": "integer", "default": 1 },
+          "timestamp": { "type": "string" }
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "metadata": {
+      "type": "object",
+      "default": {}
+    },
+    "context_version": {
+      "type": "integer",
+      "default": 1
+    }
+  },
+  "additionalProperties": true
+}

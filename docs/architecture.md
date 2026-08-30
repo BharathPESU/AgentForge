@@ -80,3 +80,16 @@ docs/deployment_result.json
 - **Input Artifacts**: `github_result.json`, `test_result.json`, `plan.json`, `design.json`, `generated/<project>/`
 - **Output Artifact**: `docs/deployment_result.json`
 - **Validation**: GitHub result verification, test result verification, Vercel project management, direct Vercel environment variable injection for Gemini API key, Vercel deployment, URL verification.
+
+---
+
+## Shared Context & Memory Layer
+
+AgentForge includes a non-intrusive shared context compatibility layer around the existing 6-agent compiler pipeline:
+
+- **Context Service** (`backend/services/context_service.py`): Manages thread-safe execution run contexts, stage history, and event logging in `generated/<project>/docs/context.json`.
+- **Context Selector** (`backend/services/context_selector.py`): Extracts stage-relevant context summaries for downstream agents to optimize token usage.
+- **Context Tools** (`backend/tools/context_tools.py`): Exposes deterministic helper functions for querying active context and retrieving full JSON artifacts on demand.
+- **Long-Term Memory Service** (`backend/services/memory_service.py`): Optional persistent memory store for reusable architecture patterns and preferences.
+- **Fallback Mechanism**: If context storage is disabled (`AGENT_CONTEXT_ENABLED=false`) or fails, agents gracefully fall back to reading JSON artifacts directly from disk.
+

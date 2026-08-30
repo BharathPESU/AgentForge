@@ -2,7 +2,14 @@
 
 All notable changes to AgentForge will be documented in this file.
 
-## [0.9.0] - 2026-08-28
+## [0.9.5] - 2026-08-30
+
+### Added
+- Implemented non-intrusive Shared Execution Context and Memory compatibility layer (`backend/services/context_service.py`, `context_selector.py`, `context_prompt_builder.py`, `memory_service.py`).
+- Added formal context JSON Schema in `backend/schemas/context_schema.json`.
+- Created agent context tools in `backend/tools/context_tools.py`.
+- Integrated context tracking, stage events, and retry loop state in `RootAgent` (`backend/agents/root_agent.py`).
+- Created unit and fallback test suites (`backend/tests/test_context.py`, `test_memory.py`, `test_context_fallback.py`).
 
 ## [0.9.4] - 2026-08-28
 

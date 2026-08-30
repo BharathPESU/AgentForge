@@ -87,14 +87,20 @@ class RootAgent:
         start_time = time.time()
         set_gemini_api_key_env()
         abs_project_path = os.path.abspath(project_path)
+        project_name = os.path.basename(abs_project_path.rstrip("/\\"))
 
         os.makedirs(abs_project_path, exist_ok=True)
+
+        # Initialize shared run context
+        from backend.services.context_service import ContextService
+        ContextService.create_run_context(project_name=project_name, user_idea=user_idea)
 
         pipeline_log: List[Dict[str, Any]] = []
 
         # ─────────────────────────────────────────────────────────
         # STAGE 1: ARCHITECT AGENT
         # ─────────────────────────────────────────────────────────
+        ContextService.set_current_stage(project_name, "architect")
         if override_architect_plan is not None:
             architect_res = {
                 "status": "success",
@@ -108,6 +114,7 @@ class RootAgent:
 
         pipeline_log.append({"stage": "architecture", "result": architect_res})
         if architect_res.get("status") != "success":
+            ContextService.record_stage_status(project_name, "architect", "failed")
             return self._build_pipeline_failure(
                 failed_stage="architecture",
                 message=f"Architect Agent failed: {architect_res.get('errors')}",
@@ -115,9 +122,21 @@ class RootAgent:
                 duration=time.time() - start_time,
             )
 
+        plan_file = architect_res.get("file_path") or os.path.join(abs_project_path, "docs", "plan.json")
+        ContextService.record_stage_status(project_name, "architect", "completed")
+        ContextService.record_artifact(
+            project_name=project_name,
+            artifact_type="plan",
+            file_path=plan_file,
+            stage="architect",
+            status="completed",
+            summary="Architect Agent created system plan.",
+        )
+
         # ─────────────────────────────────────────────────────────
         # STAGE 2: DESIGNER AGENT
         # ─────────────────────────────────────────────────────────
+        ContextService.set_current_stage(project_name, "designer")
         if override_designer_design is not None:
             designer_res = {
                 "status": "success",
@@ -129,6 +148,7 @@ class RootAgent:
 
         pipeline_log.append({"stage": "design", "result": designer_res})
         if designer_res.get("status") != "success":
+            ContextService.record_stage_status(project_name, "designer", "failed")
             return self._build_pipeline_failure(
                 failed_stage="design",
                 message=f"Designer Agent failed: {designer_res.get('errors')}",
@@ -136,12 +156,25 @@ class RootAgent:
                 duration=time.time() - start_time,
             )
 
+        design_file = designer_res.get("file_path") or os.path.join(abs_project_path, "docs", "design.json")
+        ContextService.record_stage_status(project_name, "designer", "completed")
+        ContextService.record_artifact(
+            project_name=project_name,
+            artifact_type="design",
+            file_path=design_file,
+            stage="designer",
+            status="completed",
+            summary="Designer Agent generated system design.",
+        )
+
         # ─────────────────────────────────────────────────────────
         # STAGE 3: CODER AGENT
         # ─────────────────────────────────────────────────────────
+        ContextService.set_current_stage(project_name, "coder")
         coder_res = self.coder.generate_code(project_path=abs_project_path)
         pipeline_log.append({"stage": "coding", "result": coder_res})
         if coder_res.get("status") != "success":
+            ContextService.record_stage_status(project_name, "coder", "failed")
             return self._build_pipeline_failure(
                 failed_stage="coding",
                 message=f"Coder Agent failed: {coder_res.get('errors')}",
@@ -149,9 +182,21 @@ class RootAgent:
                 duration=time.time() - start_time,
             )
 
+        coder_file = os.path.join(abs_project_path, "docs", "coder_result.json")
+        ContextService.record_stage_status(project_name, "coder", "completed")
+        ContextService.record_artifact(
+            project_name=project_name,
+            artifact_type="coder_result",
+            file_path=coder_file,
+            stage="coder",
+            status="completed",
+            summary="Coder Agent generated Google ADK Python application code.",
+        )
+
         # ─────────────────────────────────────────────────────────
         # STAGE 4: TESTER AGENT (WITH RETRY FEEDBACK LOOP TO CODER)
         # ─────────────────────────────────────────────────────────
+        ContextService.set_current_stage(project_name, "tester")
         tester_res = self.tester.validate_project(project_path=abs_project_path)
         retry_count = 0
 
@@ -160,6 +205,13 @@ class RootAgent:
             and retry_count < MAX_CODER_RETRIES
         ):
             retry_count += 1
+            ContextService.append_event(
+                project_name=project_name,
+                stage="tester",
+                status="retrying",
+                summary=f"Validation failed. Retrying Coder stage (attempt {retry_count + 1})",
+                attempt=retry_count + 1,
+            )
             # Feedback loop: Coder Agent re-executes code generation
             coder_retry_res = self.coder.generate_code(project_path=abs_project_path)
             tester_res = self.tester.validate_project(project_path=abs_project_path)
@@ -171,6 +223,7 @@ class RootAgent:
 
         pipeline_log.append({"stage": "testing", "result": tester_res, "retries": retry_count})
         if tester_res.get("status") != "passed":
+            ContextService.record_stage_status(project_name, "tester", "failed")
             next_agent = tester_res.get("next_action", {}).get("agent", "coder_agent")
             return self._build_pipeline_failure(
                 failed_stage="testing",
@@ -181,12 +234,25 @@ class RootAgent:
                 duration=time.time() - start_time,
             )
 
+        test_file = os.path.join(abs_project_path, "docs", "test_result.json")
+        ContextService.record_stage_status(project_name, "tester", "completed")
+        ContextService.record_artifact(
+            project_name=project_name,
+            artifact_type="test_result",
+            file_path=test_file,
+            stage="tester",
+            status="completed",
+            summary="Tester Agent passed 15-step validation suite.",
+        )
+
         # ─────────────────────────────────────────────────────────
         # STAGE 5: GITHUB AGENT
         # ─────────────────────────────────────────────────────────
+        ContextService.set_current_stage(project_name, "github")
         github_res = self.github.publish_repository(project_path=abs_project_path)
         pipeline_log.append({"stage": "github", "result": github_res})
         if github_res.get("status") != "success":
+            ContextService.record_stage_status(project_name, "github", "failed")
             return self._build_pipeline_failure(
                 failed_stage="github",
                 message=f"GitHub Agent failed: {github_res.get('message')}",
@@ -194,20 +260,45 @@ class RootAgent:
                 duration=time.time() - start_time,
             )
 
+        gh_file = os.path.join(abs_project_path, "docs", "github_result.json")
+        ContextService.record_stage_status(project_name, "github", "completed")
+        ContextService.record_artifact(
+            project_name=project_name,
+            artifact_type="github_result",
+            file_path=gh_file,
+            stage="github",
+            status="completed",
+            summary="GitHub Agent created remote repository and pushed codebase.",
+        )
+
         # ─────────────────────────────────────────────────────────
         # STAGE 6: DEPLOYER AGENT
         # ─────────────────────────────────────────────────────────
+        ContextService.set_current_stage(project_name, "deployer")
         deployer_res = self.deployer.deploy_project(
             project_path=abs_project_path, gemini_api_key=gemini_api_key
         )
         pipeline_log.append({"stage": "deployment", "result": deployer_res})
         if deployer_res.get("status") != "success":
+            ContextService.record_stage_status(project_name, "deployer", "failed")
             return self._build_pipeline_failure(
                 failed_stage="deployment",
                 message=f"Deployer Agent failed: {deployer_res.get('failure', {}).get('message')}",
                 pipeline_log=pipeline_log,
                 duration=time.time() - start_time,
             )
+
+        dep_file = os.path.join(abs_project_path, "docs", "deployment_result.json")
+        ContextService.record_stage_status(project_name, "deployer", "completed")
+        ContextService.record_artifact(
+            project_name=project_name,
+            artifact_type="deployment_result",
+            file_path=dep_file,
+            stage="deployer",
+            status="completed",
+            summary="Deployer Agent deployed project to Vercel.",
+        )
+        ContextService.set_current_stage(project_name, "completed")
 
         # ─────────────────────────────────────────────────────────
         # FINAL SUCCESS PAYLOAD
