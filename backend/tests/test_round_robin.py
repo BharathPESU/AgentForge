@@ -17,24 +17,28 @@ def test_load_all_keys():
     assert isinstance(keys, list)
 
 
-def test_round_robin_rotation():
-    """Verify sequential round-robin rotation across 30 keys."""
+def test_round_robin_rotation(monkeypatch):
+    """Verify sequential round-robin rotation across keys."""
+    monkeypatch.setenv("GEMINI_API_KEY1", "MOCK_KEY_ALPHA")
+    monkeypatch.setenv("GEMINI_API_KEY2", "MOCK_KEY_BETA")
     reset_round_robin()
     keys = get_all_gemini_api_keys()
-    num_keys = len(keys)
+    assert len(keys) >= 2
 
-    # First cycle
-    for i in range(num_keys):
-        k = get_next_gemini_api_key()
-        assert k == keys[i]
+    k1 = get_next_gemini_api_key()
+    assert k1 == "MOCK_KEY_ALPHA"
+    k2 = get_next_gemini_api_key()
+    assert k2 == "MOCK_KEY_BETA"
 
     # Wraparound check
     k_wrap = get_next_gemini_api_key()
-    assert k_wrap == keys[0]
+    assert k_wrap == "MOCK_KEY_ALPHA"
 
 
-def test_set_gemini_api_key_env():
+def test_set_gemini_api_key_env(monkeypatch):
     """Verify environment variable update during round-robin selection."""
+    monkeypatch.setenv("GEMINI_API_KEY1", "MOCK_KEY_ALPHA")
+    monkeypatch.setenv("GEMINI_API_KEY2", "MOCK_KEY_BETA")
     reset_round_robin()
     k1 = set_gemini_api_key_env()
     assert os.environ.get("GEMINI_API_KEY") == k1
@@ -42,4 +46,4 @@ def test_set_gemini_api_key_env():
 
     k2 = set_gemini_api_key_env()
     assert os.environ.get("GEMINI_API_KEY") == k2
-    assert k1 != k2 or len(get_all_gemini_api_keys()) == 1
+    assert k1 != k2
