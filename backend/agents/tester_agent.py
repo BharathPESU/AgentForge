@@ -102,6 +102,8 @@ class TesterAgent:
         self,
         project_path: str = "generated/project01",
         override_llm_response: Optional[str] = None,
+        whiteboard: Optional[Any] = None,
+        board_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Perform comprehensive 15-step validation suite on the target project.
         
@@ -112,18 +114,61 @@ class TesterAgent:
         abs_proj = os.path.abspath(project_path)
         failures: List[Dict[str, Any]] = []
 
-        # Step 1: Read coder_result.json context if available
-        coder_res_path = os.path.join(abs_proj, "docs", "coder_result.json")
+        # Step 1: Read coder_result.json context if available — whiteboard-first
         coder_ctx = {}
-        if os.path.isfile(coder_res_path):
+        if whiteboard is not None:
             try:
-                with open(coder_res_path, "r", encoding="utf-8") as f:
-                    coder_ctx = json.load(f)
+                state = whiteboard.read() if hasattr(whiteboard, "read") else None
+                if state is not None:
+                    impl = state.agent_context.get("implementation")
+                    if impl:
+                        coder_ctx = impl if isinstance(impl, dict) else {}
+                    elif board_context and board_context.get("implementation"):
+                        coder_ctx = board_context["implementation"] if isinstance(board_context["implementation"], dict) else {}
             except Exception:
                 pass
+        if not coder_ctx:
+            coder_res_path = os.path.join(abs_proj, "docs", "coder_result.json")
+            if os.path.isfile(coder_res_path):
+                try:
+                    with open(coder_res_path, "r", encoding="utf-8") as f:
+                        coder_ctx = json.load(f)
+                except Exception:
+                    pass
+        # also check board_context direct
+        if not coder_ctx and board_context and board_context.get("implementation"):
+            coder_ctx = board_context["implementation"] if isinstance(board_context["implementation"], dict) else {}
 
-        # Step 2: Validate plan.json
-        plan_val = validate_plan(project_path)
+        # Step 2: Validate plan.json — whiteboard-first
+        plan_val = None
+        design_val = None
+        if whiteboard is not None:
+            try:
+                state = whiteboard.read() if hasattr(whiteboard, "read") else None
+                if state is not None:
+                    arch = state.agent_context.get("architecture")
+                    des = state.agent_context.get("design")
+                    if arch:
+                        from backend.tools.file_tools import validate_plan_json as _vp
+                        _pr = _vp(arch)
+                        plan_val = {"valid": _pr["valid"], "data": arch, "errors": _pr["errors"], "file_path": os.path.join(abs_proj, "docs", "plan.json")}
+                        if des and _pr["valid"]:
+                            from backend.tools.designer_tools import validate_design_json as _vd
+                            _dr = _vd(des, arch)
+                            design_val = {"valid": _dr["valid"], "data": des, "errors": _dr["errors"]}
+            except Exception:
+                pass
+        if plan_val is None and board_context and board_context.get("architecture"):
+            arch_bc = board_context["architecture"]
+            from backend.tools.file_tools import validate_plan_json as _vp2
+            _pr2 = _vp2(arch_bc)
+            plan_val = {"valid": _pr2["valid"], "data": arch_bc, "errors": _pr2["errors"], "file_path": os.path.join(abs_proj, "docs", "plan.json")}
+            if board_context.get("design") and _pr2["valid"]:
+                from backend.tools.designer_tools import validate_design_json as _vd2
+                _dr2 = _vd2(board_context["design"], arch_bc)
+                design_val = {"valid": _dr2["valid"], "data": board_context["design"], "errors": _dr2["errors"]}
+        if plan_val is None:
+            plan_val = validate_plan(project_path)
         if not plan_val["valid"]:
             result_payload = self._build_result_payload(
                 status="blocked",
@@ -159,8 +204,9 @@ class TesterAgent:
             self._write_test_result(abs_proj, result_payload)
             return result_payload
 
-        # Step 3: Validate design.json
-        design_val = validate_design(project_path)
+        # Step 3: Validate design.json — whiteboard-first if not already resolved
+        if design_val is None:
+            design_val = validate_design(project_path)
         if not design_val["valid"]:
             result_payload = self._build_result_payload(
                 status="blocked",

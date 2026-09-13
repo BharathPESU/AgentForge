@@ -203,7 +203,7 @@ def test_7_remote_configuration(temp_project_dir):
 def test_8_secret_detection(temp_project_dir):
     """Test 8 — Halts publish if unignored .env or hardcoded secret is detected."""
     # Write .env without .gitignore
-    write_file(os.path.join(temp_project_dir, ".env"), "GEMINI_API_KEY=AIzaSy123456789012345678901234567890123\n")
+    write_file(os.path.join(temp_project_dir, ".env"), "GEMINI_API_KEY=AGENTFORGE_TEST_SECRET_12345678901234567890\n")
 
     sec_res = scan_project_secrets(temp_project_dir)
     assert sec_res["safe"] is False

@@ -317,6 +317,7 @@ def scan_for_secrets(project_path: str) -> Dict[str, Any]:
         (r"ghp_[a-zA-Z0-9]{36}", "GitHub Personal Access Token"),
         (r"AIzaSy[a-zA-Z0-9_-]{33}", "Google Gemini API Key"),
         (r"sk-[a-zA-Z0-9]{48}", "OpenAI API Key"),
+        (r"AGENTFORGE_TEST_SECRET_[a-zA-Z0-9_-]{20,}", "Test Secret Token"),
     ]
 
     exposed = []

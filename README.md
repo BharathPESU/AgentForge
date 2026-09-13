@@ -581,9 +581,11 @@ generated/support_triager/
 
 ## Agent Memory and Context
 
-- **Execution Session Memory**: AgentForze isolates execution state per session using Google ADK's `InMemorySessionService`.
-- **Contract-Based Artifact Passing**: Agents communicate deterministically by reading and writing structured JSON artifacts (`plan.json` $\rightarrow$ `design.json` $\rightarrow$ `test_result.json` $\rightarrow$ `github_result.json` $\rightarrow$ `deployment_result.json`).
-- **Feedback Retry Memory**: If Tester Agent validation fails, failure details are passed directly back to Coder Agent for iterative code correction (up to 3 retries).
+- **Shared Whiteboard (Primary)**: AgentForge's orchestration uses a synchronized Shared Whiteboard (`backend/context/`) as the runtime source of truth — `WhiteboardState` holds `run_id`, `current_agent`, `current_stage`, `status`, `progress`, `stage_states`, `agent_outputs`, `decisions`, `errors`, `retry_counts`, `artifacts` (references), `execution_history`, `state_version`. Access via `read()`, `update()`, `patch()`, `append_event()`, `compare_and_update()` with optimistic versioning.
+- **Supervisor Coordination**: `SupervisorAgent` inspects the whiteboard and routes `architect→designer→coder→tester→github→deployer→finish` with failure routing (`implementation→coder`, `design→designer`, `architecture→architect`) and enforces `MAX_SUPERVISOR_STEPS=12` / `MAX_AGENT_RETRIES=3`.
+- **Compact Context Injection**: `WhiteboardContextSelector.for_agent()` delivers onlyrelevant context (e.g., coder gets architecture+design) to minimize tokens; large artifacts remain as filesystem references.
+- **Legacy Artifact Passing (Compatibility)**: Previous JSON artifact chain (`plan.json` → `design.json` → `test_result.json` → `github_result.json` → `deployment_result.json`) remains as optional user-visible outputs but is NOT required for inter-agent communication.
+- **Feedback Retry Memory**: If Tester validation fails, the whiteboard records the failure, the Supervisor routes back to Coder/Designer/Architect, `retry_counts` are incremented, downstream stages are reset, and the full `execution_history` is preserved within the same `run_id`.
 
 ---
 

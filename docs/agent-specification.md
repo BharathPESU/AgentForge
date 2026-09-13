@@ -61,7 +61,27 @@
 
 ---
 
-## 7. Shared Context & Memory Layer Services
+## 7. Supervisor Agent
+
+- **Location**: `backend/agents/supervisor_agent.py`
+- **System Prompt**: `backend/prompts/supervisor_prompt.md`
+- **Input**: `WhiteboardState` (shared whiteboard)
+- **Output**: `RoutingDecision` (`next_agent`, `action` in `continue|retry|blocked|finish`, `reason`, `confidence`)
+- **Responsibility**: Inspects whiteboard (`current_stage`, `stage_states`, `agent_outputs`, `errors`, `retry_counts`, `artifacts`, `execution_history`), applies deterministic routing (happy-path `architect→designer→coder→tester→github→deployer→finish` and failure routing `implementation→coder`, `design→designer`, `architecture→architect`, `github→github`, `vercel build→coder`, `vercel config→deployer`), enforces `MAX_SUPERVISOR_STEPS=12` and `MAX_AGENT_RETRIES=3`, never performs specialist work.
+
+## 8. Shared Whiteboard Layer (Primary Communication)
+
+- **Models**: `backend/context/models.py` (`WhiteboardState`, `ArtifactReference`, `AgentOutput`, `WhiteboardEvent`, `RoutingDecision`)
+- **Whiteboard**: `backend/context/whiteboard.py` (synchronized `read`, `update`, `patch`, `append_event`, `compare_and_update` with `state_version`)
+- **Sync**: `backend/context/sync.py` (`StaleWhiteboardUpdateError`, `SynchronizedWhiteboard`)
+- **Manager**: `backend/context/manager.py` (`create_run`, `get`, `get_for_project`, `start_agent`, `complete_agent`, `fail_agent`, `persist`, sanitized summaries)
+- **Store**: `backend/context/store.py` (in-memory `run_id→Whiteboard` + `project_id→run_id`, persists `whiteboard.json`)
+- **Selector**: `backend/context/selector.py` (`WhiteboardContextSelector.for_agent` — compact per-agent context)
+- **Events**: `backend/context/events.py` (`make_event`, `AGENT_STARTED`, `AGENT_COMPLETED`, `AGENT_FAILED`, `RETRY`, `RUN_COMPLETED`)
+- **Root Orchestrator**: `backend/agents/root_agent.py` implements `USER → SUPERVISOR → WHITEBOARD → SPECIALIST → WHITEBOARD → SUPERVISOR` loop; each specialist does `READ→PERFORM→WRITE→RETURN`.
+- **Responsibility**: Runtime source of truth for `run_id`, `project_id`, `current_agent`, `current_stage`, `status`, `progress`, `decisions`, `errors`, `retry_counts`, `artifacts` (references, not large files), `history`. Prevents stale writes, reduces token usage via selector, excludes secrets.
+
+## 9. Legacy Shared Context & Memory Layer (Compatibility)
 
 - **Context Service**: `backend/services/context_service.py`
 - **Context Selector**: `backend/services/context_selector.py`
@@ -69,4 +89,4 @@
 - **Memory Service**: `backend/services/memory_service.py`
 - **Context Tools**: `backend/tools/context_tools.py`
 - **Schema**: `backend/schemas/context_schema.json`
-- **Responsibility**: Manages execution state, stage history, and artifact references across builder agents while providing token-efficient stage-relevant context injection and fallback capabilities.
+- **Responsibility**: Legacy compatibility layer mirroring whiteboard to `context.json`; agents now use whiteboard-first with file fallback.

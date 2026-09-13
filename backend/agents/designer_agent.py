@@ -84,18 +84,66 @@ class DesignerAgent:
         self,
         project_path: str = ".",
         override_llm_response: Optional[str] = None,
+        whiteboard: Optional[Any] = None,
+        board_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Generate, validate, self-correct, and save the design.json file.
         
         Args:
             project_path: Directory or path where plan.json exists and design.json will be written.
             override_llm_response: Optional string override for testing/mocking.
+            whiteboard: Optional Whiteboard instance for whiteboard-first reads.
+            board_context: Optional compact context from WhiteboardContextSelector.
             
         Returns:
             Dict containing status, output paths, and design specifications.
         """
-        # Step 1: Read and validate plan.json
-        plan_res = read_plan_json(project_path)
+        # Step 1: Read and validate plan.json — whiteboard-first, file fallback
+        plan_data = None
+        plan_file_path = os.path.join(os.path.abspath(project_path), "docs", "plan.json")
+        if whiteboard is not None:
+            try:
+                state = whiteboard.read() if hasattr(whiteboard, "read") else None
+                if state is not None:
+                    ctx_arch = state.agent_context.get("architecture") if hasattr(state, "agent_context") else None
+                    if ctx_arch:
+                        plan_data = ctx_arch
+                        # validate whiteboard plan still
+                        from backend.tools.file_tools import validate_plan_json as _vp
+                        _vres = _vp(plan_data)
+                        if _vres["valid"]:
+                            plan_res = {"valid": True, "data": plan_data, "file_path": plan_file_path, "errors": []}
+                        else:
+                            plan_res = {"valid": False, "data": plan_data, "errors": _vres["errors"]}
+                    else:
+                        # also try board_context
+                        if board_context and board_context.get("architecture"):
+                            plan_data = board_context["architecture"]
+                            from backend.tools.file_tools import validate_plan_json as _vp2
+                            _vres2 = _vp2(plan_data)
+                            plan_res = {"valid": _vres2["valid"], "data": plan_data, "file_path": plan_file_path, "errors": _vres2["errors"]}
+                        else:
+                            plan_res = read_plan_json(project_path)
+                    # if whiteboard had arch but invalid, fallback to file check
+                    if not plan_res["valid"] and plan_data is None:
+                        plan_res = read_plan_json(project_path)
+                else:
+                    plan_res = read_plan_json(project_path)
+            except Exception:
+                plan_res = read_plan_json(project_path)
+        elif board_context and board_context.get("architecture"):
+            plan_data = board_context["architecture"]
+            from backend.tools.file_tools import validate_plan_json as _vp3
+            _vres3 = _vp3(plan_data)
+            plan_res = {"valid": _vres3["valid"], "data": plan_data, "file_path": plan_file_path, "errors": _vres3["errors"]}
+            if not plan_res["valid"]:
+                # fallback to file if whiteboard-supplied plan invalid
+                fallback = read_plan_json(project_path)
+                if fallback["valid"]:
+                    plan_res = fallback
+        else:
+            plan_res = read_plan_json(project_path)
+
         if not plan_res["valid"]:
             return {
                 "status": "failed",
@@ -105,7 +153,7 @@ class DesignerAgent:
             }
 
         plan_data = plan_res["data"]
-        plan_file_path = plan_res["file_path"]
+        plan_file_path = plan_res.get("file_path", plan_file_path)
 
         set_gemini_api_key_env()
         api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")

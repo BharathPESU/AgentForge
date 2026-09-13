@@ -114,6 +114,8 @@ class ArchitectAgent:
         user_idea: str,
         project_path: str = ".",
         override_llm_response: Optional[str] = None,
+        whiteboard: Optional[Any] = None,
+        board_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Generate, validate, self-correct, and save the architecture plan.json.
         

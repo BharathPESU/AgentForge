@@ -135,6 +135,7 @@ def scan_project_secrets(project_path: str) -> Dict[str, Any]:
     secret_patterns = [
         (r"ghp_[a-zA-Z0-9]{36}", "GitHub Personal Access Token"),
         (r"AIzaSy[a-zA-Z0-9_-]{33}", "Google Gemini API Key"),
+        (r"AGENTFORGE_TEST_SECRET_[a-zA-Z0-9_-]{20,}", "Test Secret Token"),
     ]
 
     for root, dirs, files in os.walk(safe_proj):

@@ -57,13 +57,38 @@
 
 ---
 
-## Shared Execution Context & Memory Integration
+## Shared Whiteboard & Supervisor Orchestration
 
-Throughout Stages 1 through 6, AgentForge maintains an additive shared execution context (`backend/services/context_service.py`):
-- **Stage Initialization**: On run start, `ContextService.create_run_context()` creates a new context (`run_id`, `project_id`, `user_idea`).
-- **Stage Transitions**: As each stage begins, `ContextService.set_current_stage()` updates the active stage to `in_progress`.
-- **Artifact Registration**: Upon stage completion, outputs are registered as artifact references in `context.json`.
-- **Targeted Context Injection**: Downstream agents receive compact context blocks formatted by `ContextSelector` and `ContextPromptBuilder`.
-- **Retry Continuity**: During Tester -> Coder retry loops, the same context is maintained with incremented attempt numbers.
-- **Fallback**: If context is disabled (`AGENT_CONTEXT_ENABLED=false`), agents revert seamlessly to direct disk artifact reads.
+Throughout Stages 1 through 6, AgentForge is coordinated via the Shared Whiteboard and Supervisor (`backend/context/` + `backend/agents/supervisor_agent.py`):
+
+```text
+USER
+  │
+  ▼
+SUPERVISOR — inspects Whiteboard, decides next_agent (architect→designer→coder→tester→github→deployer)
+  │
+  ▼
+SHARED WHITEBOARD — source of truth: user_idea, stage_states, agent_outputs, decisions, errors, retry_counts, artifacts, history, progress, state_version
+  │
+  ├── Architect reads user_idea → writes architecture → whiteboard
+  ├── Designer reads architecture → writes design → whiteboard
+  ├── Coder reads architecture+design → writes implementation → whiteboard
+  ├── Tester reads arch+design+implementation → writes test_result → whiteboard
+  ├── GitHub reads test_result → writes github_result → whiteboard
+  └── Deployer reads github+test → writes deployment_result → whiteboard
+        │
+        ▼
+    SUPERVISOR — re-reads whiteboard, handles retries (MAX_AGENT_RETRIES=3), enforces MAX_SUPERVISOR_STEPS=12, routes failures (implementation→coder, design→designer, architecture→architect, github→github, vercel build→coder, vercel config→deployer), then finish
+```
+
+- **Stage Initialization**: `WhiteboardManager.create_run(project_id, project_path, user_idea)` creates `WhiteboardState` (`run_id`, `state_version=1`, stage_states=`waiting`).
+- **Stage Execution**: `WhiteboardManager.start_agent(board, agent)` marks `in_progress`, `WhiteboardContextSelector.for_agent()` injects compact context, agent does `READ→PERFORM→WRITE`, then `WhiteboardManager.complete_agent()` / `fail_agent()` stores `AgentOutput` + `ArtifactReference` + increments `state_version`.
+- **Synchronization**: `Whiteboard` uses `RLock` + `compare_and_update(expected_version)` to prevent stale writes / lost updates.
+- **Retry Continuity**: Tester→Coder retry loops preserve `run_id`/`project_id`, increment `retry_counts[coder_agent]`, reset downstream `stage_states` to `waiting` and clear stale outputs via `_reset_downstream_after_retry`, maintain full `execution_history`.
+- **Artifact References**: Whiteboard stores `{path, type, producer, status, summary}` — not large file contents.
+- **Fallback**: Whiteboard is primary; JSON artifacts (`plan.json`, `design.json`, etc.) are optional compatibility outputs. If whiteboard unavailable, agents fall back to direct file reads.
+
+## Legacy Shared Execution Context (Compatibility)
+
+Old `ContextService` (`backend/services/context_service.py`) is retained for backward compatibility and mirrors whiteboard transitions to `context.json`, but is no longer the communication backbone.
 

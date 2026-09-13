@@ -54,10 +54,10 @@ def test_context_disabled_fallback(monkeypatch, tmp_path):
 
     orchestrator = RootAgent()
     # Mock lower stages to avoid external API calls
-    monkeypatch.setattr(orchestrator.coder, "generate_code", lambda project_path: {"status": "success"})
-    monkeypatch.setattr(orchestrator.tester, "validate_project", lambda project_path: {"status": "passed"})
-    monkeypatch.setattr(orchestrator.github, "publish_repository", lambda project_path: {"status": "success", "repository_url": "https://github.com/mock/repo"})
-    monkeypatch.setattr(orchestrator.deployer, "deploy_project", lambda project_path, gemini_api_key=None: {
+    monkeypatch.setattr(orchestrator.coder, "generate_code", lambda project_path, **kwargs: {"status": "success"})
+    monkeypatch.setattr(orchestrator.tester, "validate_project", lambda project_path, **kwargs: {"status": "passed"})
+    monkeypatch.setattr(orchestrator.github, "publish_repository", lambda project_path, **kwargs: {"status": "success", "repository_url": "https://github.com/mock/repo"})
+    monkeypatch.setattr(orchestrator.deployer, "deploy_project", lambda project_path, **kwargs: {
         "status": "success",
         "github": {"repository_url": "https://github.com/mock/repo"},
         "vercel": {"deployment_url": "https://mock.vercel.app"},

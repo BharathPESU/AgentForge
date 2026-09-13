@@ -206,6 +206,8 @@ class GitHubAgent:
         project_path: str = "generated/project01",
         override_llm_response: Optional[str] = None,
         private: Optional[bool] = None,
+        whiteboard: Optional[Any] = None,
+        board_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Publish approved generated project to GitHub.
         
@@ -213,38 +215,54 @@ class GitHubAgent:
             project_path: Path to target generated project.
             override_llm_response: Optional override for testing.
             private: Explicit privacy override (default reads GITHUB_REPOSITORY_PRIVATE env var).
+            whiteboard: Optional Whiteboard instance for whiteboard-first reads.
+            board_context: Optional compact selector context.
             
         Returns:
             Dict containing github_result.json handoff contract.
         """
         abs_proj = os.path.abspath(project_path)
 
-        # Step 1 & 2: Check test_result.json status
-        test_res_file = os.path.join(abs_proj, "docs", "test_result.json")
-        if not os.path.isfile(test_res_file):
-            return self._build_failure_payload(
-                status="blocked",
-                project_path=project_path,
-                reason="testing_not_passed",
-                error_category="TEST_NOT_PASSED",
-                message="test_result.json not found. Run Tester Agent before publishing.",
-                next_agent="tester_agent",
-                next_reason="Testing has not been performed on the generated project.",
-            )
-
-        try:
-            with open(test_res_file, "r", encoding="utf-8") as f:
-                test_result_data = json.load(f)
-        except Exception as e:
-            return self._build_failure_payload(
-                status="blocked",
-                project_path=project_path,
-                reason="testing_not_passed",
-                error_category="TEST_NOT_PASSED",
-                message=f"Failed to parse test_result.json: {str(e)}",
-                next_agent="tester_agent",
-                next_reason="test_result.json is unreadable.",
-            )
+        # Step 1 & 2: Check test_result.json status — whiteboard-first
+        test_result_data = None
+        if whiteboard is not None:
+            try:
+                state = whiteboard.read() if hasattr(whiteboard, "read") else None
+                if state is not None:
+                    tr = state.agent_context.get("test_result")
+                    if tr and isinstance(tr, dict):
+                        test_result_data = tr
+                    elif board_context and board_context.get("test_result"):
+                        test_result_data = board_context["test_result"] if isinstance(board_context["test_result"], dict) else None
+            except Exception:
+                pass
+        if test_result_data is None and board_context and board_context.get("test_result") and isinstance(board_context["test_result"], dict):
+            test_result_data = board_context["test_result"]
+        if test_result_data is None:
+            test_res_file = os.path.join(abs_proj, "docs", "test_result.json")
+            if not os.path.isfile(test_res_file):
+                return self._build_failure_payload(
+                    status="blocked",
+                    project_path=project_path,
+                    reason="testing_not_passed",
+                    error_category="TEST_NOT_PASSED",
+                    message="test_result.json not found. Run Tester Agent before publishing.",
+                    next_agent="tester_agent",
+                    next_reason="Testing has not been performed on the generated project.",
+                )
+            try:
+                with open(test_res_file, "r", encoding="utf-8") as f:
+                    test_result_data = json.load(f)
+            except Exception as e:
+                return self._build_failure_payload(
+                    status="blocked",
+                    project_path=project_path,
+                    reason="testing_not_passed",
+                    error_category="TEST_NOT_PASSED",
+                    message=f"Failed to parse test_result.json: {str(e)}",
+                    next_agent="tester_agent",
+                    next_reason="test_result.json is unreadable.",
+                )
 
         if test_result_data.get("status") != "passed":
             return self._build_failure_payload(
@@ -257,8 +275,21 @@ class GitHubAgent:
                 next_reason="Generated project must pass validation before GitHub publication.",
             )
 
-        # Step 3: Read plan.json project metadata
-        plan_res = read_plan_json(project_path)
+        # Step 3: Read plan.json project metadata — whiteboard-first
+        plan_res = None
+        if whiteboard is not None:
+            try:
+                state = whiteboard.read() if hasattr(whiteboard, "read") else None
+                if state is not None:
+                    arch = state.agent_context.get("architecture")
+                    if arch:
+                        plan_res = {"valid": True, "data": arch}
+            except Exception:
+                pass
+        if plan_res is None and board_context and board_context.get("architecture"):
+            plan_res = {"valid": True, "data": board_context["architecture"]}
+        if plan_res is None:
+            plan_res = read_plan_json(project_path)
         raw_name = "agentforge_project"
         description = "Multi-agent system built with AgentForge"
         if plan_res.get("valid") and plan_res.get("data"):

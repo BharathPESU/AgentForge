@@ -22,6 +22,7 @@ from backend.agents.deployer_agent import DeployerAgent
 from backend.agents.designer_agent import DesignerAgent
 from backend.agents.github_agent import GitHubAgent
 from backend.agents.tester_agent import TesterAgent
+from backend.agents.supervisor_agent import MAX_AGENT_RETRIES as MAX_CODER_RETRIES
 
 router = APIRouter(prefix="/api", tags=["AgentForge"])
 
@@ -217,19 +218,45 @@ def run_full_pipeline(req: PipelineRunRequest) -> Dict[str, Any]:
     else:
         target_path = os.path.join(BASE_GENERATED_DIR, "project_1")
 
+    run_id = req.run_id or f"run-{ (req.project_name or 'project') }-{uuid.uuid4().hex[:6]}"
+    cancel_event = threading.Event()
+    _cancel_registry[run_id] = cancel_event
+    # also register by project_name for stop endpoint fallback
+    if req.project_name:
+        _cancel_registry[f"proj:{req.project_name.strip().replace(' ', '_')}"] = cancel_event
     try:
         orchestrator = RootAgent()
         result = orchestrator.run_pipeline(
             user_idea=req.user_idea,
             project_path=target_path,
             gemini_api_key=req.gemini_api_key,
+            cancel_event=cancel_event,
+            run_id=run_id,
         )
+        # If cancelled during execution, normalize to cancelled payload
+        if cancel_event.is_set() and result.get("status") != "cancelled":
+            return {
+                "status": "cancelled",
+                "project_path": target_path,
+                "run_id": run_id,
+                "message": "Pipeline terminated by user",
+                "pipeline_log": result.get("pipeline_log", []),
+            }
+        # include run_id for client-side cancellation tracking
+        if isinstance(result, dict) and "run_id" not in result:
+            result["run_id"] = run_id
         return result
     except Exception as e:
+        if cancel_event.is_set():
+            return {"status": "cancelled", "run_id": run_id, "message": "Pipeline terminated by user"}
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Pipeline execution failed: {str(e)}"
         )
+    finally:
+        _cancel_registry.pop(run_id, None)
+        if req.project_name:
+            _cancel_registry.pop(f"proj:{req.project_name.strip().replace(' ', '_')}", None)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -247,10 +274,41 @@ class PipelineCancelRequest(BaseModel):
 
 @router.post("/pipeline/cancel", summary="Cancel a Running Pipeline Stream")
 def cancel_pipeline(req: PipelineCancelRequest) -> Dict[str, Any]:
-    """Signal a running /pipeline/stream to stop between stages."""
+    """Signal a running /pipeline/stream or /pipeline/run to stop between stages."""
+    # Try exact run_id, then project-scoped key, then scan for matching suffix
     event = _cancel_registry.get(req.run_id)
     if event is None:
-        # Already gone or never started — treat as success
+        event = _cancel_registry.get(f"proj:{req.run_id}")
+    if event is None:
+        # Scan for any key that ends with the run_id or contains project name
+        for key, ev in list(_cancel_registry.items()):
+            if req.run_id in key:
+                event = ev
+                break
+    if event is None:
+        # Also try to cancel via whiteboard if project is known
+        # Best-effort: mark whiteboard as blocked if project path exists
+        try:
+            proj_path = os.path.join(BASE_GENERATED_DIR, req.run_id)
+            if not os.path.isdir(proj_path):
+                # try proj: prefix stripped
+                alt = req.run_id.replace("proj:", "")
+                proj_path = os.path.join(BASE_GENERATED_DIR, alt)
+            if os.path.isdir(proj_path):
+                from backend.context.manager import WhiteboardManager
+                board = WhiteboardManager.get_for_project(proj_path)
+                if board:
+                    from backend.context import events
+                    def _stop(s):
+                        s.status = "blocked"
+                        s.errors.append({"reason": "terminated_by_user", "stage": s.current_stage})
+                        return s
+                    board.update(_stop)
+                    WhiteboardManager.append_event(board, event_type=events.RUN_FAILED, status="cancelled", summary="Pipeline terminated by user via cancel (project fallback)", agent="system")
+                    WhiteboardManager.persist(board)
+                    return {"cancelled": True, "run_id": req.run_id, "via": "whiteboard"}
+        except Exception:
+            pass
         return {"cancelled": False, "reason": "run_id not found (may have already completed)"}
     event.set()
     return {"cancelled": True, "run_id": req.run_id}
@@ -747,8 +805,75 @@ def save_project_file_content(project_name: str, file_path: str, req: FileSaveRe
 
 @router.get("/projects/{project_name}/execution", summary="Get Project Execution Status")
 def get_project_execution(project_name: str) -> Dict[str, Any]:
-    """Get current pipeline execution status, active agent, progress, and stage metrics."""
+    """Get current pipeline execution status, active agent, progress, and stage metrics.
+
+    Prefers Shared Whiteboard as source of truth if available, falling back to file artifacts.
+    """
     project_dir = _resolve_project_dir(project_name)
+    # Try whiteboard first
+    try:
+        from backend.context.manager import WhiteboardManager
+        board = WhiteboardManager.get_for_project(project_dir)
+        if board is not None:
+            state = board.read()
+            # Map whiteboard to frontend execution status
+            stage_map = {
+                "architect": state.stage_states.get("architect", "waiting"),
+                "designer": state.stage_states.get("designer", "waiting"),
+                "coder": state.stage_states.get("coder", "waiting"),
+                "tester": state.stage_states.get("tester", "waiting"),
+                "github": state.stage_states.get("github", "waiting"),
+                "deployer": state.stage_states.get("deployer", "waiting"),
+            }
+            def _map(s: str) -> str:
+                if s == "completed": return "COMPLETED"
+                if s == "failed": return "FAILED"
+                if s == "blocked": return "FAILED"
+                if s == "in_progress": return "RUNNING"
+                return "WAITING"
+            s1, s2, s3, s4, s5 = _map(stage_map["architect"]), _map(stage_map["designer"]), _map(stage_map["coder"]), _map(stage_map["tester"]) if stage_map["tester"]=="completed" and state.agent_outputs.get("tester_agent") and state.agent_outputs["tester_agent"].status=="passed" else ("COMPLETED" if stage_map["tester"]=="completed" else _map(stage_map["tester"])), _map(stage_map["deployer"])
+            # adjust s4 to reflect tester passed status
+            if stage_map["tester"] == "completed":
+                t_out = state.agent_outputs.get("tester_agent")
+                if t_out and t_out.status == "passed":
+                    s4 = "COMPLETED"
+                elif t_out and t_out.status in ("failed","blocked"):
+                    s4 = "FAILED"
+            # Distinguish user-terminated (STOPPED) from failure
+            is_terminated = any(isinstance(e, dict) and e.get("reason") == "terminated_by_user" for e in state.errors) or any(ev.status == "cancelled" for ev in state.execution_history)
+            if is_terminated and state.status == "blocked":
+                exec_status = "STOPPED"
+            else:
+                exec_status = "COMPLETED" if state.status == "completed" else ("RUNNING" if state.status == "running" else ("FAILED" if state.status in ("failed","blocked") else "IDLE"))
+            current_agent_map = {"architect_agent": ("architect","Atlas"), "designer_agent": ("designer","Mori"), "coder_agent": ("coder","Kite"), "tester_agent": ("tester","Sentry"), "github_agent": ("github","Pulse"), "deployer_agent": ("deployer","Harbor")}
+            cur_id, cur_name = current_agent_map.get(state.current_agent or "", ("coder","Kite"))
+            # Determine task description
+            task_msg = state.execution_history[-1].summary if state.execution_history else "Initializing"
+            return {
+                "status": exec_status,
+                "currentAgentId": cur_id,
+                "currentAgent": cur_name,
+                "current_agent": state.current_agent,
+                "current_stage": state.current_stage,
+                "task": task_msg,
+                "progress": state.progress,
+                "run_id": state.run_id,
+                "state_version": state.state_version,
+                "retry_counts": state.retry_counts,
+                "errors": state.errors,
+                "startedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(os.path.getctime(project_dir))),
+                "elapsed": "00:01:25",
+                "stages": [
+                    {"id": "s1", "label": "Architecture", "status": s1, "duration": "00:15", "detail": state.agent_outputs.get("architect_agent").summary if state.agent_outputs.get("architect_agent") else "plan.json created"},
+                    {"id": "s2", "label": "Design System", "status": s2, "duration": "00:20", "detail": state.agent_outputs.get("designer_agent").summary if state.agent_outputs.get("designer_agent") else "design.json created"},
+                    {"id": "s3", "label": "Implementation", "status": s3, "duration": "00:30", "detail": state.agent_outputs.get("coder_agent").summary if state.agent_outputs.get("coder_agent") else "Agent code generated"},
+                    {"id": "s4", "label": "Quality Gate", "status": s4, "duration": "00:10", "detail": state.agent_outputs.get("tester_agent").summary if state.agent_outputs.get("tester_agent") else "Tests validated"},
+                    {"id": "s5", "label": "Release", "status": s5, "duration": "00:10", "detail": state.agent_outputs.get("deployer_agent").summary if state.agent_outputs.get("deployer_agent") else "Deployed"},
+                ]
+            }
+    except Exception:
+        pass
+
     plan = _load_json_artifact(project_dir, "plan.json")
     design = _load_json_artifact(project_dir, "design.json")
     test_res = _load_json_artifact(project_dir, "test_result.json")
@@ -786,8 +911,31 @@ def get_project_execution(project_name: str) -> Dict[str, Any]:
 
 @router.get("/projects/{project_name}/execution/logs", summary="Get Project Logs")
 def get_project_logs(project_name: str) -> List[Dict[str, Any]]:
-    """Fetch event execution log stream for project."""
+    """Fetch event execution log stream for project — prefers whiteboard."""
     project_dir = _resolve_project_dir(project_name)
+    try:
+        from backend.context.manager import WhiteboardManager
+        board = WhiteboardManager.get_for_project(project_dir)
+        if board is not None:
+            state = board.read()
+            logs: List[Dict[str, Any]] = []
+            for idx, ev in enumerate(state.execution_history):
+                ts = time.strftime("%H:%M:%S", time.gmtime(ev.timestamp)) if isinstance(ev.timestamp, (int,float)) else str(ev.timestamp)
+                logs.append({
+                    "id": f"wb_{idx}",
+                    "timestamp": ts,
+                    "level": "INFO" if ev.status in ("completed","passed","success") else ("ERROR" if ev.status in ("failed","blocked") else "INFO"),
+                    "agent": ev.agent or ev.stage or "supervisor",
+                    "message": ev.summary or ev.event_type,
+                    "event_type": ev.event_type,
+                    "stage": ev.stage,
+                    "status": ev.status,
+                })
+            if logs:
+                return logs
+    except Exception:
+        pass
+
     test_res = _load_json_artifact(project_dir, "test_result.json")
     deploy_res = _load_json_artifact(project_dir, "deployment_result.json")
 
@@ -815,8 +963,44 @@ def start_project_execution(project_name: str) -> Dict[str, Any]:
 
 @router.post("/projects/{project_name}/stop", summary="Stop Project Execution")
 def stop_project_execution(project_name: str) -> Dict[str, Any]:
-    """Stop pipeline execution for target project."""
+    """Stop pipeline execution for target project and persist termination to Whiteboard."""
     project_dir = _resolve_project_dir(project_name)
+    # Signal any running pipeline via cancel registry (both run_id and proj: key)
+    for key in [project_name, f"proj:{project_name}", f"proj:{project_name.replace(' ', '_')}"]:
+        ev = _cancel_registry.get(key)
+        if ev:
+            ev.set()
+    # Also signal any run_id that contains project_name as substring
+    for key, ev in list(_cancel_registry.items()):
+        if project_name in key or project_name.replace(" ", "_") in key:
+            ev.set()
+    # Persist termination to Whiteboard so execution API returns STOPPED
+    try:
+        from backend.context.manager import WhiteboardManager
+        from backend.context import events
+        board = WhiteboardManager.get_for_project(project_dir)
+        if board is None:
+            from backend.context.store import get_by_project
+            board = get_by_project(project_name)
+        if board is not None:
+            state = board.read()
+            # Only block if not already completed
+            if state.status not in ("completed", "blocked", "failed"):
+                def _stop(s):
+                    s.status = "blocked"
+                    s.errors.append({"reason": "terminated_by_user", "stage": s.current_stage, "project": project_name})
+                    return s
+                board.update(_stop)
+                WhiteboardManager.append_event(board, event_type=events.RUN_FAILED, status="cancelled", summary="Pipeline terminated by user via stop", agent="system")
+                WhiteboardManager.persist(board)
+    except Exception:
+        pass
+    # Also mirror to legacy ContextService for compatibility
+    try:
+        from backend.services.context_service import ContextService
+        ContextService.record_stage_status(project_name, "stop", "blocked")
+    except Exception:
+        pass
     exec_data = get_project_execution(project_name)
     exec_data["status"] = "STOPPED"
     return exec_data
@@ -867,4 +1051,93 @@ def get_project_deployment_info(project_name: str) -> Dict[str, Any]:
         "vercelUrl": vercel_url,
         "lastDeployedAt": time.strftime("%d %b %Y · %H:%M", time.gmtime(os.path.getmtime(project_dir)))
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# WHITEBOARD API — Shared Runtime State (primary communication layer)
+# ─────────────────────────────────────────────────────────────
+
+@router.get("/runs/{run_id}", summary="Get Whiteboard Run")
+def get_run(run_id: str) -> Dict[str, Any]:
+    """Return full whiteboard state for a run_id."""
+    from backend.context.manager import WhiteboardManager
+    board = WhiteboardManager.get(run_id)
+    if not board:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found in whiteboard store.")
+    state = board.read()
+    return state.model_dump(mode="json")
+
+
+@router.get("/runs/{run_id}/state", summary="Get Whiteboard State")
+def get_run_state(run_id: str) -> Dict[str, Any]:
+    """Return whiteboard state snapshot for a run_id."""
+    from backend.context.manager import WhiteboardManager
+    board = WhiteboardManager.get(run_id)
+    if not board:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
+    state = board.read()
+    return {
+        "run_id": state.run_id,
+        "project_id": state.project_id,
+        "project_path": state.project_path,
+        "user_id": state.user_id,
+        "current_agent": state.current_agent,
+        "current_stage": state.current_stage,
+        "status": state.status,
+        "progress": state.progress,
+        "state_version": state.state_version,
+        "stage_states": state.stage_states,
+        "retry_counts": state.retry_counts,
+        "errors": state.errors,
+        "artifacts": {k: v.model_dump(mode="json") for k, v in state.artifacts.items()},
+        "agent_outputs": {k: v.model_dump(mode="json") for k, v in state.agent_outputs.items()},
+        "decisions": state.decisions,
+        "files_changed": state.files_changed,
+        "metadata": state.metadata,
+    }
+
+
+@router.get("/runs/{run_id}/events", summary="Get Whiteboard Events")
+def get_run_events(run_id: str) -> Dict[str, Any]:
+    """Return execution history events for a run_id."""
+    from backend.context.manager import WhiteboardManager
+    board = WhiteboardManager.get(run_id)
+    if not board:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
+    state = board.read()
+    return {"run_id": run_id, "events": [e.model_dump(mode="json") for e in state.execution_history], "count": len(state.execution_history)}
+
+
+@router.get("/whiteboard/{project_name}", summary="Get Project Whiteboard")
+def get_whiteboard_for_project(project_name: str) -> Dict[str, Any]:
+    """Return whiteboard state for a project (resolved via generated/ dir or direct path)."""
+    try:
+        project_dir = _resolve_project_dir(project_name)
+    except HTTPException:
+        # allow direct lookup by project_id key
+        project_dir = project_name
+    from backend.context.manager import WhiteboardManager
+    board = WhiteboardManager.get_for_project(project_dir)
+    if not board:
+        # fallback: try by project_id directly
+        from backend.context.store import get_by_project
+        board2 = get_by_project(project_name)
+        if board2:
+            board = board2
+    if not board:
+        raise HTTPException(status_code=404, detail=f"Whiteboard for project '{project_name}' not found.")
+    state = board.read()
+    return state.model_dump(mode="json")
+
+
+@router.get("/whiteboard/{project_name}/events", summary="Get Project Whiteboard Events")
+def get_whiteboard_events_for_project(project_name: str) -> Dict[str, Any]:
+    """Return execution events for a project's whiteboard."""
+    project_dir = _resolve_project_dir(project_name)
+    from backend.context.manager import WhiteboardManager
+    board = WhiteboardManager.get_for_project(project_dir)
+    if not board:
+        raise HTTPException(status_code=404, detail=f"Whiteboard for project '{project_name}' not found.")
+    state = board.read()
+    return {"project_id": state.project_id, "run_id": state.run_id, "events": [e.model_dump(mode="json") for e in state.execution_history]}
 

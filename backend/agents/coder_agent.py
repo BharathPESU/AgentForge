@@ -82,6 +82,8 @@ class CoderAgent:
         project_path: str = "generated/project01",
         gemini_api_key: Optional[str] = None,
         override_llm_response: Optional[str] = None,
+        whiteboard: Optional[Any] = None,
+        board_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Generate/update multi-agent application code based on plan.json and design.json.
         
@@ -89,12 +91,50 @@ class CoderAgent:
             project_path: Target directory path for generated project.
             gemini_api_key: Optional Gemini API key to configure in generated .env file.
             override_llm_response: Optional override string for testing.
+            whiteboard: Optional Whiteboard instance for whiteboard-first reads.
+            board_context: Optional compact selector context.
             
         Returns:
             Dict containing handoff contract result.
         """
-        # Step 1: Validate plan.json
-        plan_res = read_plan_json(project_path)
+        # Step 1: Validate plan.json — whiteboard-first
+        plan_res = None
+        design_res = None
+        if whiteboard is not None:
+            try:
+                state = whiteboard.read() if hasattr(whiteboard, "read") else None
+                if state is not None:
+                    arch = state.agent_context.get("architecture")
+                    des = state.agent_context.get("design")
+                    if arch and des:
+                        from backend.tools.file_tools import validate_plan_json as _vp
+                        from backend.tools.designer_tools import validate_design_json as _vd
+                        _pr = _vp(arch)
+                        plan_res = {"valid": _pr["valid"], "data": arch, "errors": _pr["errors"]}
+                        if _pr["valid"]:
+                            _dr = _vd(des, arch)
+                            design_res = {"valid": _dr["valid"], "data": des, "errors": _dr["errors"]}
+                        else:
+                            design_res = validate_design(project_path)
+                    elif arch and not des:
+                        from backend.tools.file_tools import validate_plan_json as _vp2
+                        _pr2 = _vp2(arch)
+                        plan_res = {"valid": _pr2["valid"], "data": arch, "errors": _pr2["errors"]}
+            except Exception:
+                pass
+        if board_context and (plan_res is None or not plan_res.get("valid") or design_res is None or not design_res.get("valid")):
+            arch_bc = board_context.get("architecture")
+            des_bc = board_context.get("design")
+            if arch_bc and des_bc and (plan_res is None or not plan_res.get("valid")):
+                from backend.tools.file_tools import validate_plan_json as _vp3
+                from backend.tools.designer_tools import validate_design_json as _vd3
+                _pr3 = _vp3(arch_bc)
+                if _pr3["valid"]:
+                    plan_res = {"valid": True, "data": arch_bc, "errors": []}
+                    _dr3 = _vd3(des_bc, arch_bc)
+                    design_res = {"valid": _dr3["valid"], "data": des_bc, "errors": _dr3["errors"]}
+        if plan_res is None or not plan_res.get("valid"):
+            plan_res = read_plan_json(project_path)
         if not plan_res["valid"]:
             return {
                 "status": "failed",
@@ -104,8 +144,9 @@ class CoderAgent:
                 "ready_for_testing": False,
             }
 
-        # Step 2: Validate design.json
-        design_res = validate_design(project_path)
+        # Step 2: Validate design.json — whiteboard-first if not already resolved
+        if design_res is None or not design_res.get("valid"):
+            design_res = validate_design(project_path)
         if not design_res["valid"]:
             return {
                 "status": "failed",

@@ -85,6 +85,8 @@ class DeployerAgent:
         project_path: str = "generated/project01",
         gemini_api_key: Optional[str] = None,
         override_llm_response: Optional[str] = None,
+        whiteboard: Optional[Any] = None,
+        board_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Deploy validated project to Vercel and configure Gemini API key.
         
@@ -92,14 +94,33 @@ class DeployerAgent:
             project_path: Path to target generated project.
             gemini_api_key: User-provided Gemini API key for Vercel env var.
             override_llm_response: Optional string override for testing.
+            whiteboard: Optional Whiteboard instance for whiteboard-first reads.
+            board_context: Optional compact selector context.
             
         Returns:
             Dict containing deployment_result.json contract structure.
         """
         abs_proj = os.path.abspath(project_path)
 
-        # Step 1: Read and verify github_result.json
-        gh_res = read_github_result(project_path)
+        # Step 1: Read and verify github_result.json — whiteboard-first
+        gh_res = None
+        if whiteboard is not None:
+            try:
+                state = whiteboard.read() if hasattr(whiteboard, "read") else None
+                if state is not None:
+                    gh = state.agent_context.get("github_result")
+                    if gh and isinstance(gh, dict):
+                        gh_res = {"valid": gh.get("status") == "success", "data": gh}
+                    elif board_context and board_context.get("github_result") and isinstance(board_context["github_result"], dict):
+                        gh_bc = board_context["github_result"]
+                        gh_res = {"valid": gh_bc.get("status") == "success", "data": gh_bc}
+            except Exception:
+                pass
+        if gh_res is None and board_context and board_context.get("github_result") and isinstance(board_context["github_result"], dict):
+            gh_bc = board_context["github_result"]
+            gh_res = {"valid": gh_bc.get("status") == "success", "data": gh_bc}
+        if gh_res is None:
+            gh_res = read_github_result(project_path)
         if not gh_res.get("valid") or gh_res.get("data", {}).get("status") != "success":
             return self._build_failure_payload(
                 status="blocked",
@@ -115,8 +136,25 @@ class DeployerAgent:
         repo_name = gh_data.get("repository", {}).get("name", "")
         repo_branch = gh_data.get("repository", {}).get("branch", "main")
 
-        # Step 2: Read and verify test_result.json
-        test_res = read_test_result(project_path)
+        # Step 2: Read and verify test_result.json — whiteboard-first
+        test_res = None
+        if whiteboard is not None:
+            try:
+                state = whiteboard.read() if hasattr(whiteboard, "read") else None
+                if state is not None:
+                    tr = state.agent_context.get("test_result")
+                    if tr and isinstance(tr, dict):
+                        test_res = {"valid": tr.get("status") == "passed", "data": tr}
+                    elif board_context and board_context.get("test_result") and isinstance(board_context["test_result"], dict):
+                        tr_bc = board_context["test_result"]
+                        test_res = {"valid": tr_bc.get("status") == "passed", "data": tr_bc}
+            except Exception:
+                pass
+        if test_res is None and board_context and board_context.get("test_result") and isinstance(board_context["test_result"], dict):
+            tr_bc = board_context["test_result"]
+            test_res = {"valid": tr_bc.get("status") == "passed", "data": tr_bc}
+        if test_res is None:
+            test_res = read_test_result(project_path)
         if not test_res.get("valid") or test_res.get("data", {}).get("status") != "passed":
             return self._build_failure_payload(
                 status="blocked",
